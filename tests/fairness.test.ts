@@ -19,6 +19,7 @@ import { GameEngine } from '../src/game/engine';
 import { PuzzleSolver } from '../src/game/solver';
 import { level1 } from '../src/data/puzzles';
 import { useGameStore } from '../src/store/gameStore';
+import { MAX_LEVEL } from '../src/game/types';
 import { calculatePawfectStars, recordLevelCompletion, saveStats } from '../src/utils/statistics';
 
 const store = () => useGameStore.getState();
@@ -213,6 +214,26 @@ describe('Progression integrity', () => {
     for (const cell of level1.solution) store().placePuppy(cell.row, cell.col);
     expect(store().isComplete).toBe(true);
     expect(store().unlockedLevels).toBe(1);
+  });
+
+  it('dev unlock-all needs __DEV__ AND the env flag, so release builds stay locked', () => {
+    const initialUnlocked = (dev: boolean, flag?: string) => {
+      const prevDev = (global as any).__DEV__;
+      (global as any).__DEV__ = dev;
+      if (flag === undefined) delete process.env.EXPO_PUBLIC_DEV_UNLOCK_ALL;
+      else process.env.EXPO_PUBLIC_DEV_UNLOCK_ALL = flag;
+      let n = 0;
+      jest.isolateModules(() => {
+        n = require('../src/store/gameStore').useGameStore.getInitialState().unlockedLevels;
+      });
+      (global as any).__DEV__ = prevDev;
+      delete process.env.EXPO_PUBLIC_DEV_UNLOCK_ALL;
+      return n;
+    };
+    expect(initialUnlocked(true)).toBe(1);
+    expect(initialUnlocked(true, '0')).toBe(1);
+    expect(initialUnlocked(false, '1')).toBe(1);
+    expect(initialUnlocked(true, '1')).toBe(MAX_LEVEL);
   });
 
   it('leaving a daily challenge restores the campaign level instead of the 0 sentinel', () => {

@@ -83,8 +83,11 @@ import {
 import { showRewardedAd } from '../ads/adManager';
 import { telemetry } from '../utils/telemetry';
 
-// Unlock every level for local testing only. Must stay false for release.
-const DEV_UNLOCK_ALL_LEVELS = false;
+// Unlock every level for local testing: EXPO_PUBLIC_DEV_UNLOCK_ALL=1 in .env.local.
+// Gated on __DEV__, so release builds (EAS / Play Store) can never ship unlocked.
+// Progress isn't persisted while on, so turning it off restores real progress.
+const DEV_UNLOCK_ALL_LEVELS =
+  typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_DEV_UNLOCK_ALL === '1';
 
 export type ScreenName = 'home' | 'map' | 'game' | 'leaderboard';
 

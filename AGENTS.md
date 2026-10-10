@@ -22,7 +22,7 @@ Expo SDK 57 / React Native 0.86 / TypeScript. Star Battle-style puzzle game, 100
 - Levels 601-1000 (twin, quota 2): 1..`MAX_TWIN_SOLUTIONS` (3) solutions. Generation starts from `src/data/twinTrialStart.ts`.
   **If you change generator rules, `getLevelMechanics`, `getLevelConfig`, or the cap, regenerate the table:**
   `npx ts-node --compiler-options '{"module":"commonjs"}' scripts/buildTwinTrialTable.ts` (~40s), then run `tests/twinBoards.test.ts`.
-- `DEV_UNLOCK_ALL_LEVELS` in `gameStore.ts` must be `false` (asserted by `tests/fairness.test.ts`).
+- `DEV_UNLOCK_ALL_LEVELS` in `gameStore.ts` is on only when `__DEV__` AND `EXPO_PUBLIC_DEV_UNLOCK_ALL=1` (set in `.env.local`). Release builds are always locked; `tests/fairness.test.ts` asserts the default is locked. Never hardcode it to `true`.
 
 ## Audio
 
