@@ -63,7 +63,7 @@ describe('Sprint 2: Navigation Architecture & World Journey Map', () => {
       expect(useGameStore.getState().activeScreen).toBe('game');
 
       startLevel(1500);
-      expect(useGameStore.getState().currentLevel).toBe(1000);
+      expect(useGameStore.getState().currentLevel).toBe(1200);
       expect(useGameStore.getState().activeScreen).toBe('game');
     });
 
@@ -78,8 +78,8 @@ describe('Sprint 2: Navigation Architecture & World Journey Map', () => {
   });
 
   describe('Thematic Chapters Configuration', () => {
-    it('defines 50 chapters spanning all 1000 levels sequentially', () => {
-      expect(CHAPTERS).toHaveLength(50);
+    it('defines 60 chapters spanning all 1200 levels sequentially', () => {
+      expect(CHAPTERS).toHaveLength(60);
 
       expect(CHAPTERS[0].id).toBe(1);
       expect(CHAPTERS[0].title).toMatch(/Sunny Backyard/);

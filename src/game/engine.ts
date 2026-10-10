@@ -10,6 +10,12 @@ export class GameEngine {
   // Puppies required per row / column / region (1 = classic, 2 = Twin Puppies)
   private quota: number;
 
+  // Hungry beds: a region can carry its own requirement; rows/cols always
+  // use the board quota.
+  private regionNeed(region: Region): number {
+    return region.requiredPups ?? this.quota;
+  }
+
   constructor(puzzleData: PuzzleData) {
     const board = this.createBoard(puzzleData);
     this.quota = Math.max(1, puzzleData.puppiesPerUnit ?? 1);
@@ -111,6 +117,63 @@ export class GameEngine {
     return true;
   }
 
+  /**
+   * True when a cell can NEVER accept a puppy under current board state —
+   * distinct from isValidPlacement which only answers "if I tried to place
+   * here, is the individual move valid?".
+   *
+   * This method ALSO returns true if the cell's row/column/region is already
+   * full of puppies even though the cell itself is empty — that's the key
+   * signal used for tap-to-eliminate quick marks.
+   */
+  public isCellImpossible(row: number, col: number): boolean {
+    const board = this.state.board;
+    if (!GameEngine.isInsideBoard(row, col, board.gridSize)) return true;
+    const v = board.cells[row][col].value;
+    if (v === 'puppy' || v === 'cat' || v === 'marked') return false; // not a candidate
+    if (v !== 'empty') return true;
+
+    // Unit already at quota → no more puppies allowed here.
+    if (this.countPuppiesInRow(board, row) >= this.quota) return true;
+    if (this.countPuppiesInColumn(board, col) >= this.quota) return true;
+    const region = this.cellRegionIndex.get(row * board.gridSize + col);
+    if (region && this.countPuppiesInRegion(board, region) >= this.regionNeed(region)) return true;
+
+    // 8-adjacency rule: a puppy/cat nearby → impossible to place another puppy here.
+    const dirs: [number, number][] = [
+      [-1, -1], [-1, 0], [-1, 1],
+      [0, -1],           [0, 1],
+      [1, -1],  [1, 0],  [1, 1],
+    ];
+    for (const [dr, dc] of dirs) {
+      const nr = row + dr;
+      const nc = col + dc;
+      if (!GameEngine.isInsideBoard(nr, nc, board.gridSize)) continue;
+      const nv = board.cells[nr][nc].value;
+      if (nv === 'puppy' || nv === 'cat') return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Single-tap QoL: mark the given cell with Paw Mark if it's IMPOSSIBLE for
+   * a puppy (row/col/region full, or adjacent to a puppy/cat). This lets
+   * players tap a candidate cell without switching tools and get instant
+   * elimination feedback. Returns true if a mark was placed.
+   */
+  public quickMarkIfImpossible(row: number, col: number): boolean {
+    if (this.state.isComplete) return false;
+    const board = this.state.board;
+    if (!GameEngine.isInsideBoard(row, col, board.gridSize)) return false;
+    if (board.cells[row][col].value !== 'empty') return false;
+    if (!this.isCellImpossible(row, col)) return false;
+    board.cells[row][col].value = 'marked';
+    this.state.moves++;
+    this.state.history.push(GameEngine.cloneBoard(board));
+    return true;
+  }
+
   public markCell(row: number, col: number): boolean {
     if (this.state.isComplete) {
       return false;
@@ -139,6 +202,43 @@ export class GameEngine {
     this.state.history.push(GameEngine.cloneBoard(board));
 
     return true;
+  }
+
+  // --- Unit counters: shared by win-check, impossibility detection, and
+  // any future UI hint that wants to show "2/3 pups in this row".
+
+  private countPuppiesInRow(board: Board, row: number): number {
+    let n = 0;
+    for (let c = 0; c < board.gridSize; c++) {
+      if (board.cells[row][c].value === 'puppy') n++;
+    }
+    return n;
+  }
+
+  private countPuppiesInColumn(board: Board, col: number): number {
+    let n = 0;
+    for (let r = 0; r < board.gridSize; r++) {
+      if (board.cells[r][col].value === 'puppy') n++;
+    }
+    return n;
+  }
+
+  private countPuppiesInRegion(board: Board, region: Region): number {
+    let n = 0;
+    for (const cell of region.cells) {
+      if (board.cells[cell.row][cell.col].value === 'puppy') n++;
+    }
+    return n;
+  }
+
+  private countPuppies(board: Board): number {
+    let n = 0;
+    for (let r = 0; r < board.gridSize; r++) {
+      for (let c = 0; c < board.gridSize; c++) {
+        if (board.cells[r][c].value === 'puppy') n++;
+      }
+    }
+    return n;
   }
 
   public restart(): void {
@@ -222,7 +322,7 @@ export class GameEngine {
       }
     }
 
-    return count < this.quota;
+    return count < this.regionNeed(cellRegion);
   }
 
   private validateAdjacency(board: Board, row: number, col: number): boolean {
@@ -287,7 +387,7 @@ export class GameEngine {
           regionPuppies++;
         }
       }
-      if (regionPuppies !== this.quota) {
+      if (regionPuppies !== this.regionNeed(region)) {
         return false;
       }
     }
@@ -321,17 +421,6 @@ export class GameEngine {
     return true;
   }
 
-  private countPuppies(board: Board): number {
-    let count = 0;
-    for (let row = 0; row < board.gridSize; row++) {
-      for (let col = 0; col < board.gridSize; col++) {
-        if (board.cells[row][col].value === 'puppy') {
-          count++;
-        }
-      }
-    }
-    return count;
-  }
 
   public validateSolution(solution: { row: number; col: number }[]): boolean {
     const board = this.state.board;
@@ -390,7 +479,7 @@ export class GameEngine {
           regionPuppies++;
         }
       }
-      if (regionPuppies !== quota) {
+      if (regionPuppies !== (region.requiredPups ?? quota)) {
         return false;
       }
     }
@@ -427,7 +516,9 @@ export class GameEngine {
     const quota = this.quota;
 
     const regionMap = new Int32Array(size * size);
+    const regionNeed = new Map<number, number>();
     for (const region of board.regions) {
+      regionNeed.set(region.id, region.requiredPups ?? quota);
       for (const cell of region.cells) {
         regionMap[cell.row * size + cell.col] = region.id;
       }
@@ -461,7 +552,7 @@ export class GameEngine {
       if (forbidden[row * size + col]) return false;
       if (usedCols[col] >= quota) return false;
       const regId = regionMap[row * size + col];
-      if ((usedRegions.get(regId) || 0) >= quota) return false;
+      if ((usedRegions.get(regId) || 0) >= (regionNeed.get(regId) ?? quota)) return false;
       if (row > 0) {
         for (let k = 0; k < quota; k++) {
           const pc = placedCols[(row - 1) * quota + k];
@@ -503,7 +594,7 @@ export class GameEngine {
         // every row placed `quota` pups — regions/cols hit quota exactly
         // only if all quotas are met (region capacities enforced during placement)
         for (const region of board.regions) {
-          if ((usedRegions.get(region.id) || 0) !== quota) return;
+          if ((usedRegions.get(region.id) || 0) !== (regionNeed.get(region.id) ?? quota)) return;
         }
         for (let c = 0; c < size; c++) {
           if (usedCols[c] !== quota) return;

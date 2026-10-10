@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Platform,
   Image,
   useWindowDimensions,
+  BackHandler,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGameStore } from '../store/gameStore';
@@ -43,11 +45,14 @@ import {
   saveClaimedAdoptions,
   getMechanicIntrosSeen,
   getChapterStoriesSeen,
+  getClaimedChapterStamps,
+  saveClaimedChapterStamp,
 } from '../utils/storage';
 import { soundManager } from '../utils/soundManager';
 import { recordLevelCompletion, getTotalStats, getTotalScore, PUPPY_SCORE } from '../utils/statistics';
 import { getLevelDifficulty, getDifficultyColor, getDifficultyLabel } from '../utils/levelHelpers';
-import { getChapterForLevel } from '../data/chapterData';
+import { getChapterForLevel, Chapter } from '../data/chapterData';
+import { MAX_LEVEL } from '../game/types';
 import { getChapterStory, CHAPTERS_WITH_STORIES, ChapterStory } from '../data/chapterStories';
 import { JennyAvatar, JennyMood } from '../components/assets/JennyAvatar';
 import { InteractiveTutorial } from '../components/InteractiveTutorial';
@@ -57,6 +62,7 @@ import {
   generateDailyShareText,
 } from '../utils/dailyChallenge';
 import { AdoptionModal } from '../components/AdoptionModal';
+import { ChapterStampModal } from '../components/ChapterStampModal';
 import { FREE_HINTS_PER_LEVEL } from '../ads/adConfig';
 import {
   adsAvailable,
@@ -101,6 +107,9 @@ export const GameScreen: React.FC = () => {
     activeHint,
     hintMessage,
     requestHint,
+    refreshStreakHintsCache,
+    sessionGameOverCount,
+    applyEasierLevelOption,
   } = useGameStore();
 
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -158,6 +167,7 @@ export const GameScreen: React.FC = () => {
   const prevPuppyCellsRef = useRef<Set<string>>(new Set());
   const scoreChipScale = useRef(new Animated.Value(1)).current;
   const [activeMilestone, setActiveMilestone] = useState<PuppyMilestone | null>(null);
+  const [activeChapterStamp, setActiveChapterStamp] = useState<Chapter | null>(null);
   const [shareToast, setShareToast] = useState(false);
 
   // Wrong Move Feedback State
@@ -166,17 +176,90 @@ export const GameScreen: React.FC = () => {
   // Hint speech bubble + restart confirmation
   const [hintBubble, setHintBubble] = useState<string | null>(null);
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   // Rewarded-ad hint gate: free hints exhausted → offer an ad for one more
   const [showHintAdPrompt, setShowHintAdPrompt] = useState(false);
-  const [hintAdBusy, setHintAdBusy] = useState(false);
-  const [hintAdError, setHintAdError] = useState<string | null>(null);
 
   // Mechanic intro tutorial (cats, linked, twin)
   const [activeMechanicIntro, setActiveMechanicIntro] = useState<MechanicType | null>(null);
 
   // Chapter intro story modal (fires on first entry to mechanic debut chapters)
   const [activeChapterStory, setActiveChapterStory] = useState<ChapterStory | null>(null);
+
+  // Completion Modal State
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+
+  // Y5: System Back-Handler intercept — prevents accidental Android gesture /
+  // hardware-back from silently dumping the player mid-garden. Pops a confirm
+  // dialog when moves have been made (nothing to lose on a blank level).
+  useEffect(() => {
+    const handleBackPress = (): boolean => {
+      // If any modal is already open — let it handle its own close first.
+      if (
+        showRestartConfirm ||
+        showHintAdPrompt ||
+        showCompletionModal ||
+        showSettingsModal ||
+        showLeaveConfirm ||
+        !!activeMilestone ||
+        !!activeChapterStamp ||
+        !!activeMechanicIntro ||
+        !!activeChapterStory ||
+        showTutorial
+      ) {
+        return false;
+      }
+      // Level untouched: 0 moves or already complete → no confirmation needed.
+      if (moves === 0 || isComplete) {
+        return false; // let default back action go through (navigate up)
+      }
+      // Pop confirmation: the progress save is always-current so we don't need
+      // to run it again here. The wording matches the D1-retention spec.
+      Alert.alert(
+        'Leave this garden?',
+        'Your progress is saved — you can come back any time.',
+        [
+          { text: 'Keep Playing', style: 'cancel', onPress: () => {} },
+          {
+            text: 'Leave',
+            style: 'destructive',
+            onPress: () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              try { soundManager.play('button'); } catch {}
+              setActiveScreen(isDailyChallenge ? 'home' : 'map');
+            },
+          },
+        ],
+        { cancelable: true },
+      );
+      return true; // we consumed the back press; don't let OS navigate away.
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    return () => {
+      sub.remove();
+    };
+  }, [
+    moves,
+    isComplete,
+    isDailyChallenge,
+    showRestartConfirm,
+    showHintAdPrompt,
+    showCompletionModal,
+    showSettingsModal,
+    showLeaveConfirm,
+    activeMilestone,
+    activeChapterStamp,
+    activeMechanicIntro,
+    activeChapterStory,
+    showTutorial,
+    setActiveScreen,
+  ]);
+
+  // Rewarded ad request state (shown via showHintAdPrompt gate)
+  const [hintAdBusy, setHintAdBusy] = useState(false);
+  const [hintAdError, setHintAdError] = useState<string | null>(null);
 
   // Cat aura: show red glow around cats for 1.5s at level start
   const [showCatAura, setShowCatAura] = useState(false);
@@ -192,9 +275,6 @@ export const GameScreen: React.FC = () => {
   const comboTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const comboToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPlacementTime = useRef(0);
-
-  // Completion Modal State
-  const [showCompletionModal, setShowCompletionModal] = useState(false);
 
   // Readiness gate — prevents flicker from cascading mounts
   const [isReady, setIsReady] = useState(false);
@@ -314,11 +394,12 @@ export const GameScreen: React.FC = () => {
         }).catch(() => {});
       }
 
-      // Check for new mechanic intros (cats, linked, twin)
+      // Check for new mechanic intros (cats, linked, twin, hungry)
       const needsCats = mechanics.catCount > 0;
       const needsLinked = mechanics.linkedCount > 0;
       const needsTwin = mechanics.puppiesPerUnit > 1;
-      if (needsCats || needsLinked || needsTwin) {
+      const needsHungry = mechanics.hungryCount > 0;
+      if (needsCats || needsLinked || needsTwin || needsHungry) {
         getMechanicIntrosSeen().then(seen => {
           if (!isMountedRef.current) return;
           if (needsCats && !seen.includes('cats')) {
@@ -327,6 +408,8 @@ export const GameScreen: React.FC = () => {
             setActiveMechanicIntro('linked');
           } else if (needsTwin && !seen.includes('twin')) {
             setActiveMechanicIntro('twin');
+          } else if (needsHungry && !seen.includes('hungry')) {
+            setActiveMechanicIntro('hungry');
           }
         }).catch(() => {});
       }
@@ -442,27 +525,36 @@ export const GameScreen: React.FC = () => {
 
     // Record statistics and calculate paw-fect star rating
     const completionTime = Math.floor((Date.now() - levelStartTime.current) / 1000);
-    recordLevelCompletion(currentLevel, moves, completionTime, hearts, hintsUsed, {
-      mistakes,
-      zen: gameMode === 'zen',
-      gridSize: board.gridSize,
-      puppiesPerUnit: mechanics.puppiesPerUnit,
-    })
-      .then(result => {
-        if (cancelled) return;
-        setPawfectResult(result);
-        setTotalScore(result.totalScore);
-        if (result.isNewBestScore) setLevelBestScore(result.score);
-      })
-      .catch(() => {});
 
     if (isDailyChallenge) {
       recordDailyCompletion({ moves, time: completionTime })
         .then(res => {
-          if (!cancelled) setDailyResult(res);
+          if (cancelled) return;
+          setDailyResult(res);
+          // If this daily completion bumped the permanent streak bonus,
+          // refresh the store's cache so the next campaign level the user
+          // starts sees the increased hint allowance immediately.
+          if (res.isStreakMilestone) {
+            refreshStreakHintsCache();
+          }
         })
         .catch(() => {});
     } else {
+      // Campaign-only: per-level stats + star rating + milestone adoptions.
+      recordLevelCompletion(currentLevel, moves, completionTime, hearts, hintsUsed, {
+        mistakes,
+        zen: gameMode === 'zen',
+        gridSize: board.gridSize,
+        puppiesPerUnit: mechanics.puppiesPerUnit,
+      })
+        .then(result => {
+          if (cancelled) return;
+          setPawfectResult(result);
+          setTotalScore(result.totalScore);
+          if (result.isNewBestScore) setLevelBestScore(result.score);
+        })
+        .catch(() => {});
+
       // Check milestone adoption reward
       const milestone = PUPPY_MILESTONES.find(m => m.level === currentLevel);
       if (milestone) {
@@ -474,6 +566,21 @@ export const GameScreen: React.FC = () => {
               milestoneTimer.current = null;
               if (!cancelled) setActiveMilestone(milestone);
             }, 700);
+          }
+        }).catch(() => {});
+      }
+
+      // Check chapter stamp completion (Level 20, 40, 60, ... 1000)
+      const currentChapter = getChapterForLevel(currentLevel);
+      if (currentChapter && currentLevel === currentChapter.end) {
+        getClaimedChapterStamps().then(claimedStamps => {
+          if (cancelled) return;
+          if (!claimedStamps.includes(currentChapter.id)) {
+            saveClaimedChapterStamp(currentChapter.id);
+            // Delay slightly after puzzle solve so celebration is punchy
+            setTimeout(() => {
+              if (!cancelled) setActiveChapterStamp(currentChapter);
+            }, 850);
           }
         }).catch(() => {});
       }
@@ -732,8 +839,8 @@ export const GameScreen: React.FC = () => {
     triggerLinkedPulse(row, col);
 
     if (lastTap && lastTap.row === row && lastTap.col === col && now - lastTap.time < DOUBLE_TAP_MAX_DELAY) {
-      // Double-tap commits a puppy. The engine overwrites a Paw Mark directly,
-      // so no undo() here — it would revert whatever the *previous* move was.
+      // Double-tap ALWAYS commits a puppy, regardless of input mode.
+      // The engine overwrites a Paw Mark directly, so no undo() here.
       const success = placePuppy(row, col);
       if (!success) {
         showWrongFeedback(row, col);
@@ -745,6 +852,26 @@ export const GameScreen: React.FC = () => {
       }
       setLastTap(null);
       return;
+    }
+
+    // --- Playtest feedback path: single tap on an IMPOSSIBLE empty cell
+    // → auto-drop a Paw Mark (X). Works in BOTH modes. Players no longer
+    // have to swap to Mark tool just to eliminate an obvious spot.
+    const cellValue = board.cells[row]?.[col]?.value;
+    const engine = useGameStore.getState().engine;
+    const canQuickMark =
+      cellValue === 'empty' &&
+      engine !== null &&
+      engine.isCellImpossible !== undefined &&
+      engine.isCellImpossible(row, col);
+
+    if (canQuickMark) {
+      const quickOK = markCell(row, col); // store internally calls quickMarkIfImpossible first
+      if (quickOK) {
+        soundManager.play('markX');
+        setLastTap({ row, col, time: now });
+        return;
+      }
     }
 
     if (inputMode === 'puppy') {
@@ -832,13 +959,21 @@ export const GameScreen: React.FC = () => {
   };
 
   const handleNextLevel = async () => {
+    // Defensive guard: daily completion UI doesn't expose "Next Level" so
+    // this code path shouldn't be reachable, but if it ever is (e.g. a buggy
+    // refactor) bail to Home instead of silently corrupting campaign state.
+    if (isDailyChallenge) {
+      setShowCompletionModal(false);
+      setActiveScreen('home');
+      return;
+    }
     setShowCompletionModal(false);
     setLastPlacedPuppy(null);
     setIsDragging(false);
     // Frequency-capped interstitial — resolves immediately when not due.
     await maybeShowInterstitial(currentLevel);
     if (!isMountedRef.current) return;
-    if (currentLevel < 1000) {
+    if (currentLevel < MAX_LEVEL) {
       initializeLevel(currentLevel + 1);
     } else {
       initializeLevel(1);
@@ -903,7 +1038,10 @@ export const GameScreen: React.FC = () => {
         },
       ]}
     >
-      <CandyBackground style={[styles.container, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <CandyBackground
+        level={currentLevel}
+        style={[styles.container, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 12) }]}
+      >
       {!isReady ? (
         <View style={styles.loadingShimmer}>
           <Animated.Text style={[styles.loadingPaw, { opacity: shimmerAnim }]}>🐾</Animated.Text>
@@ -960,6 +1098,45 @@ export const GameScreen: React.FC = () => {
             <Text style={styles.gameOverSub}>
               You ran out of chances. Try the puzzle again!
             </Text>
+
+            {/* Y4: Easier puzzle soft-fail CTA — shown on 3rd+ Game Over on the
+                 same campaign level to rescue players hitting a difficulty cliff. */}
+            {!isDailyChallenge && sessionGameOverCount >= 3 && (
+              <View style={styles.easierPuzzlePanel}>
+                <Text style={styles.easierPuzzleTitle}>🌈 Want an easier puzzle?</Text>
+                <Text style={styles.easierPuzzleSub}>
+                  {sessionGameOverCount >= 5
+                    ? 'No shame in a gentler garden — take a break and come back stronger.'
+                    : 'Everyone needs a hand sometimes — pick a softer path below.'}
+                </Text>
+                <View style={styles.easierButtonsRow}>
+                  <CandyButton
+                    size="sm"
+                    skin="blue"
+                    label={Math.max(1, currentLevel - 10) === 1 ? 'Start From Level 1' : `-10 Levels`}
+                    icon={<Text style={styles.easierButtonIcon}>⏪</Text>}
+                    style={styles.easierButtonLeft}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      try { soundManager.play('button'); } catch {}
+                      applyEasierLevelOption('rewind');
+                    }}
+                  />
+                  <CandyButton
+                    size="sm"
+                    skin="green"
+                    label="Zen Mode"
+                    icon={<Text style={styles.easierButtonIcon}>🧘</Text>}
+                    style={styles.easierButtonRight}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      try { soundManager.play('button'); } catch {}
+                      applyEasierLevelOption('zen');
+                    }}
+                  />
+                </View>
+              </View>
+            )}
 
             <View style={styles.modalButtonGroup}>
               <CandyButton
@@ -1152,8 +1329,8 @@ export const GameScreen: React.FC = () => {
                   block
                   size="lg"
                   skin="green"
-                  label={currentLevel >= 1000 ? 'Play Again' : 'Next Level'}
-                  icon={<Text style={styles.controlIcon}>{currentLevel >= 1000 ? '🔄' : '➡️'}</Text>}
+                  label={currentLevel >= MAX_LEVEL ? 'Play Again' : 'Next Level'}
+                  icon={<Text style={styles.controlIcon}>{currentLevel >= MAX_LEVEL ? '🔄' : '➡️'}</Text>}
                   onPress={handleNextLevel}
                 />
               )}
@@ -1263,12 +1440,13 @@ export const GameScreen: React.FC = () => {
               {isDailyChallenge ? '🔥 Daily' : getDifficultyLabel(getLevelDifficulty(currentLevel))}
             </Text>
           </View>
-          {(mechanics.puppiesPerUnit > 1 || mechanics.catCount > 0 || mechanics.linkedCount > 0) && (
+          {(mechanics.puppiesPerUnit > 1 || mechanics.catCount > 0 || mechanics.linkedCount > 0 || mechanics.hungryCount > 0) && (
             <Text style={styles.twistText}>
               {mechanics.puppiesPerUnit > 1 &&
                 `👯 ${mechanics.puppiesPerUnit} pups per row, column & patch!  `}
               {mechanics.catCount > 0 && '😾 Cats need space!  '}
-              {mechanics.linkedCount > 0 && '🔗 Linked beds share 1 pup!'}
+              {mechanics.linkedCount > 0 && '🔗 Linked beds share 1 pup!  '}
+              {mechanics.hungryCount > 0 && '🍽️ Numbered beds have their own count!'}
             </Text>
           )}
         </View>
@@ -1346,6 +1524,7 @@ export const GameScreen: React.FC = () => {
             quota={mechanics.puppiesPerUnit}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            level={currentLevel}
           />
           {scorePops.map(pop => (
             <ScorePop
@@ -1437,6 +1616,17 @@ export const GameScreen: React.FC = () => {
         visible={!!activeMilestone}
         milestone={activeMilestone}
         onClose={() => setActiveMilestone(null)}
+      />
+
+      {/* Chapter Completion Passport Stamp Ceremony Modal */}
+      <ChapterStampModal
+        visible={!!activeChapterStamp}
+        chapter={activeChapterStamp}
+        onClose={() => setActiveChapterStamp(null)}
+        onNextChapter={() => {
+          setActiveChapterStamp(null);
+          handleNextLevel();
+        }}
       />
         </>
       )}
@@ -1630,7 +1820,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 18,
     borderRadius: 16,
-    gap: 12,
+    // Y3: gap:12 replaced with wrongToastIcon marginRight:12 below.
     shadowColor: '#120726',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.5,
@@ -1639,6 +1829,7 @@ const styles = StyleSheet.create({
   },
   wrongToastIcon: {
     fontSize: 24,
+    marginRight: 12, // Y3: replaces wrongToast gap:12
   },
   comboToast: {
     position: 'absolute',
@@ -1695,8 +1886,50 @@ const styles = StyleSheet.create({
   },
   modalButtonGroup: {
     width: '100%',
-    gap: 10,
+    // Y3: replaced gap: 10. Every child CandyButton after the first has
+    // marginTop: 10 applied inline (Restart above Keep Looking, etc.)
     marginTop: 16,
+  },
+
+  /* Y4: Easier Puzzle CTA panel (shown on 3rd+ Game Over, campaign only) */
+  easierPuzzlePanel: {
+    width: '100%',
+    marginTop: 16,
+    backgroundColor: 'rgba(127, 212, 255, 0.12)',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#7FD4FF',
+  },
+  easierPuzzleTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#9EDCFF',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  easierPuzzleSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: CANDY_TEXT.onDarkSoft,
+    textAlign: 'center',
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  easierButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  easierButtonLeft: {
+    flex: 1,
+    // replaces easierButtonsRow gap: 10 for legacy Android compat.
+    marginRight: 10,
+  },
+  easierButtonRight: {
+    flex: 1,
+  },
+  easierButtonIcon: {
+    fontSize: 15,
   },
 
   /* Paw-fect Star System & Daily Share */
@@ -1713,11 +1946,14 @@ const styles = StyleSheet.create({
   },
   starBadgeRow: {
     flexDirection: 'row',
-    gap: 8,
     marginBottom: 6,
   },
   starBadgeIcon: {
     fontSize: 28,
+    // Y3: replaced starBadgeRow gap: 8 — every star after the first has a
+    // preceding sibling with 8px right margin via inline (simpler: add to
+    // every icon since the tiny trailing bleed is invisible).
+    marginRight: 8,
   },
   starLit: {
     opacity: 1,
@@ -1752,7 +1988,6 @@ const styles = StyleSheet.create({
   scoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginTop: 8,
   },
   scoreEarned: {
@@ -1762,6 +1997,8 @@ const styles = StyleSheet.create({
     textShadowColor: CANDY_TEXT.shadow,
     textShadowOffset: { width: 0, height: 1.5 },
     textShadowRadius: 0,
+    // Y3: replaced scoreRow gap: 8 — right margin before scoreBestBadge.
+    marginRight: 8,
   },
   scoreBestBadge: {
     fontSize: 11,
@@ -1848,7 +2085,7 @@ const styles = StyleSheet.create({
   completionJennyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    // Y3: gap:12 replaced with completionJennySpeech marginLeft:12 below
     backgroundColor: 'rgba(20, 10, 44, 0.4)',
     padding: 12,
     borderRadius: 18,
@@ -1859,6 +2096,7 @@ const styles = StyleSheet.create({
   },
   completionJennySpeech: {
     flex: 1,
+    marginLeft: 12, // Y3: replaces completionJennyRow gap:12
   },
   completionJennyName: {
     fontSize: 12,
@@ -1903,11 +2141,12 @@ const styles = StyleSheet.create({
   modePillContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    // Y3: gap:8 — icon rendered inline with marginRight:8 on modePillPaw below
   },
   modePillPaw: {
     width: 18,
     height: 18,
+    marginRight: 8, // Y3: replaces modePillContent gap:8
   },
   activePuppyPill: {
     backgroundColor: '#FF8AB0',
@@ -1962,25 +2201,27 @@ const styles = StyleSheet.create({
   centerLevelGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    // Y3: gap:10 replaced with centerLevelInfo marginLeft:10 below
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   rightNavActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    // Y3: gap:6 replaced with navSquareButton marginRight:6 below
     marginLeft: 'auto',
   },
   navSquareButton: {
     minWidth: 40,
+    marginRight: 6, // Y3: replaces rightNavActions gap:6
   },
   navIcon: {
     fontSize: 15,
   },
   centerLevelInfo: {
     alignItems: 'center',
-    gap: 3,
+    marginLeft: 10, // Y3: replaces centerLevelGroup gap:10
+    // Y3: inner column gap:3 → children navTitle + difficultyBadgeHeader are spaced with marginTop:3 on badge below
   },
   levelScoreChip: {
     backgroundColor: 'rgba(20, 10, 44, 0.45)',
@@ -2033,6 +2274,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.35)',
+    marginTop: 3, // Y3: replaces centerLevelInfo column gap:3
   },
   difficultyBadgeHeaderText: {
     fontSize: 11,
@@ -2044,18 +2286,20 @@ const styles = StyleSheet.create({
   subStatsBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    // Y3: gap:14 replaced with subStatItem marginRight:14 below
     marginBottom: 12,
   },
   subStatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingVertical: 5,
     paddingHorizontal: 14,
+    marginRight: 14, // Y3: replaces subStatsBar gap:14
+    // Y3: inner row gap:6 replaced with subStatIcon marginRight:6 below
   },
   subStatIcon: {
     fontSize: 16,
+    marginRight: 6, // Y3: replaces subStatItem gap:6
   },
   subStatText: {
     fontSize: 14,

@@ -11,14 +11,73 @@ import { GameScreen } from './src/screens/GameScreen';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { CANDY_BACKDROP } from './src/utils/theme';
 import { initAds } from './src/ads/adManager';
+import {
+  LegalAcceptanceModal,
+} from './src/components/LegalAcceptanceModal';
+import {
+  getLegalAccepted,
+  setLegalAccepted,
+  storageReady,
+} from './src/utils/storage';
+import {
+  initNotificationsOnAppLaunch,
+  registerNotificationTapListener,
+} from './src/utils/notifications';
+import { LaunchExperience } from './src/components/startup/LaunchExperience';
 
 export default function App() {
   const { activeScreen } = useGameStore();
   const [renderedScreen, setRenderedScreen] = useState<ScreenName>(activeScreen);
+  const [showLegalAcceptance, setShowLegalAcceptance] = useState(false);
+  const [isAppLoaded, setIsAppLoaded] = useState(false);
+  const [isInitReady, setIsInitReady] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
+  // One-time legal acceptance gate: on launch, read persistent flag.
+  // If not yet accepted, show the blocking modal immediately. The user
+  // cannot begin their first game until they Accept. Already-accepted
+  // installs skip this entirely (no re-prompt on subsequent cold boots).
   useEffect(() => {
-    soundManager.init();
+    let alive = true;
+    (async () => {
+      await storageReady;
+      const accepted = await getLegalAccepted();
+      if (alive) {
+        if (!accepted) {
+          setShowLegalAcceptance(true);
+        } else {
+          initNotificationsOnAppLaunch();
+        }
+        setIsInitReady(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const handleAcceptLegal = async () => {
+    await setLegalAccepted(true);
+    setShowLegalAcceptance(false);
+    initNotificationsOnAppLaunch();
+  };
+
+  // Open daily puzzle when a daily notification is tapped
+  useEffect(() => {
+    const unsub = registerNotificationTapListener(() => {
+      const { activeScreen: currentScreen, isDailyChallenge, startDailyChallenge } = useGameStore.getState();
+      if (currentScreen === 'game' && isDailyChallenge) {
+        return;
+      }
+      startDailyChallenge();
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    // Note: soundManager.init() fires eagerly inside SoundManager's constructor at
+    // module load — do NOT duplicate init() calls here (the await lock de-dups so it's
+    // harmless, but omitting it keeps boot 1-tick cleaner).
     soundManager.startBgm();
     initAds();
     return () => {
@@ -63,6 +122,12 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
+        {!isAppLoaded && (
+          <LaunchExperience
+            onComplete={() => setIsAppLoaded(true)}
+            isInitReady={isInitReady}
+          />
+        )}
         <Animated.View style={[styles.screenContainer, { opacity: fadeAnim }]}>
           <ErrorBoundary>
             {renderedScreen === 'home' && <HomeScreen />}
@@ -71,6 +136,13 @@ export default function App() {
           </ErrorBoundary>
         </Animated.View>
         <StatusBar style="light" />
+        {/* One-time first-launch gate. Rendered OUTSIDE the fade anim so the
+             modal never flashes in/out during a screen transition. Absolute
+             positioning lets it sit on top of everything without clipping. */}
+        <LegalAcceptanceModal
+          visible={isAppLoaded && showLegalAcceptance}
+          onAccept={handleAcceptLegal}
+        />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

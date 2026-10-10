@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     borderWidth: 2,
     borderColor: '#7FE9D8',
-    gap: 10,
+    // Y3: gap:10 replaced with powerUnlockedContent marginLeft:10
     width: '100%',
   },
   powerUnlockedIcon: {
@@ -314,6 +314,7 @@ const styles = StyleSheet.create({
   },
   powerUnlockedContent: {
     flex: 1,
+    marginLeft: 10, // Y3: replaces powerUnlockedCard gap:10
   },
   powerUnlockedTitle: {
     fontSize: 13,
@@ -342,6 +343,6 @@ const styles = StyleSheet.create({
   },
   buttonGroup: {
     width: '100%',
-    gap: 10,
+    // Y3: gap:10 — each button renders with marginBottom:10 inline in JSX
   },
 });

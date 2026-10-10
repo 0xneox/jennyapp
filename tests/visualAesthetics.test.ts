@@ -8,20 +8,20 @@ import {
 
 describe('Sprint 3: Visual Identity & Bespoke Cozy Art System', () => {
   describe('Rainbow Candy Palette', () => {
-    it('defines 10 distinct, vibrant rainbow themes', () => {
-      expect(RAINBOW_CANDY_PALETTE).toHaveLength(10);
+    it('defines 16 distinct, vibrant rainbow themes', () => {
+      expect(RAINBOW_CANDY_PALETTE).toHaveLength(16);
 
       const names = RAINBOW_CANDY_PALETTE.map(t => t.name);
-      expect(names).toContain('Red');
-      expect(names).toContain('Pink');
-      expect(names).toContain('Orange');
-      expect(names).toContain('Yellow');
-      expect(names).toContain('Green');
-      expect(names).toContain('Cyan');
-      expect(names).toContain('Blue');
-      expect(names).toContain('Indigo');
-      expect(names).toContain('Violet');
-      expect(names).toContain('Magenta');
+      expect(names).toContain('Cherry Red');
+      expect(names).toContain('Hot Pink');
+      expect(names).toContain('Pumpkin Orange');
+      expect(names).toContain('Lemon Gold');
+      expect(names).toContain('Leaf Green');
+      expect(names).toContain('Sky Cyan');
+      expect(names).toContain('Ocean Blue');
+      expect(names).toContain('Royal Indigo');
+      expect(names).toContain('Grape Violet');
+      expect(names).toContain('Plum Magenta');
     });
 
     it('each theme contains valid hex strings for pastel, border, darkContrast, and accent', () => {
@@ -34,10 +34,10 @@ describe('Sprint 3: Visual Identity & Bespoke Cozy Art System', () => {
       });
     });
 
-    it('all 10 pastel colors are unique to prevent ambiguity between regions', () => {
+    it('all 16 pastel colors are unique to prevent ambiguity between regions', () => {
       const pastels = RAINBOW_CANDY_PALETTE.map(t => t.pastel.toLowerCase());
       const uniquePastels = new Set(pastels);
-      expect(uniquePastels.size).toBe(10);
+      expect(uniquePastels.size).toBe(16);
     });
 
     it('border color has lower lightness than pastel color for high-contrast region contours', () => {
@@ -62,12 +62,12 @@ describe('Sprint 3: Visual Identity & Bespoke Cozy Art System', () => {
 
     it('getRegionColor maps regionId safely and cyclically', () => {
       expect(getRegionColor(1)).toBe(RAINBOW_CANDY_PALETTE[0].pastel);
-      expect(getRegionColor(2)).toBe(RAINBOW_CANDY_PALETTE[5].pastel);
-      expect(getRegionColor(11)).toBe(RAINBOW_CANDY_PALETTE[0].pastel); // wraps around
+      expect(getRegionColor(2)).toBe(RAINBOW_CANDY_PALETTE[10].pastel);
+      expect(getRegionColor(17)).toBe(RAINBOW_CANDY_PALETTE[0].pastel); // wraps around 16
     });
 
     it('consecutive region ids always map to distinct hues (stride permutation)', () => {
-      for (let id = 1; id < 10; id++) {
+      for (let id = 1; id < 16; id++) {
         expect(getRegionColor(id)).not.toBe(getRegionColor(id + 1));
       }
       const firstFour = new Set([1, 2, 3, 4].map(getRegionColor));
@@ -76,7 +76,7 @@ describe('Sprint 3: Visual Identity & Bespoke Cozy Art System', () => {
 
     it('getRegionBorderColor maps correctly', () => {
       expect(getRegionBorderColor(1)).toBe(RAINBOW_CANDY_PALETTE[0].border);
-      expect(getRegionBorderColor(5)).toBe(RAINBOW_CANDY_PALETTE[3].border);
+      expect(getRegionBorderColor(5)).toBe(RAINBOW_CANDY_PALETTE[4].border);
     });
 
     it('returns parchment fallback theme for undefined or 0 regionId', () => {
@@ -145,4 +145,24 @@ describe('Sprint 3: Visual Identity & Bespoke Cozy Art System', () => {
       expect(cell01.right).toBe(true); // right grid boundary
     });
   });
+
+  describe('Launch Experience: Publisher Splash & Loading Brand Specifications', () => {
+    const {
+      PUBLISHER_NAME,
+      PUBLISHER_TRADEMARK,
+      LAUNCH_QUOTE_TEXT,
+      LAUNCH_QUOTE_AUTHOR,
+    } = require('../src/components/startup/launchConstants');
+
+    it('displays the publisher 21B Games™ branding correctly', () => {
+      expect(PUBLISHER_NAME).toBe('21B GAMES');
+      expect(PUBLISHER_TRADEMARK).toBe('™');
+    });
+
+    it('matches the exact inspirational motivational quote and attribution', () => {
+      expect(LAUNCH_QUOTE_TEXT).toBe('“Every puzzle is a little adventure for your brain.”');
+      expect(LAUNCH_QUOTE_AUTHOR).toBe('— Jennydoku');
+    });
+  });
 });
+

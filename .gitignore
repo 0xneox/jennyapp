@@ -50,3 +50,6 @@ yarn-error.*
 
 # exported upload cert artifact (regenerate via scripts/exportUploadCert.js)
 *.der
+
+# local release binaries (.apk / .aab)
+builds/

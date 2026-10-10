@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { CandyButton } from './candy/CandyButton';
 import { CANDY_BACKDROP, CANDY_TEXT } from '../utils/theme';
+import { telemetry } from '../utils/telemetry';
 
 interface Props {
   children: React.ReactNode;
@@ -26,7 +27,15 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    this.props.onError?.(error, info.componentStack ?? '');
+    const stack = info.componentStack ?? '';
+    // Always log to telemetry singleton FIRST — ensures zero-dependency
+    // ring buffer captures the crash before any optional handler runs
+    // (and before the crash SDK adapter is even installed Day 2).
+    telemetry.recordException(error, {
+      source: 'ErrorBoundary.render',
+      component_stack: stack ? stack.slice(0, 4000) : undefined,
+    });
+    this.props.onError?.(error, stack);
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
 
@@ -36,10 +45,12 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (!this.state.error) return this.props.children;
     return (
       <View style={styles.root}>
-        <Text style={styles.emoji}>🐶</Text>
-        <Text style={styles.title}>Oops! A puppy knocked something over.</Text>
-        <Text style={styles.sub}>Don't worry — your progress is safe. Let's try that again.</Text>
-        <CandyButton skin="green" size="lg" label="Back to the Garden" onPress={this.reset} />
+        <Text style={[styles.emoji, styles.errorChild]}>🐶</Text>
+        <Text style={[styles.title, styles.errorChild]}>Oops! A puppy knocked something over.</Text>
+        <Text style={[styles.sub, styles.errorChild]}>Don't worry — your progress is safe. Let's try that again.</Text>
+        <View style={styles.errorChild}>
+          <CandyButton skin="green" size="lg" label="Back to the Garden" onPress={this.reset} />
+        </View>
       </View>
     );
   }
@@ -51,8 +62,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
-    gap: 14,
     backgroundColor: CANDY_BACKDROP.bottom,
+  },
+  errorChild: {
+    // Explicit per-child spacing is used instead of `gap:` because the
+    // StyleSheet `gap` property crashes or misrenders on legacy Android
+    // running React Native ≤ 0.70. Since ErrorBoundary is our last line of
+    // defense, it must render reliably on every device we ship to.
+    marginVertical: 7,
   },
   emoji: { fontSize: 64 },
   title: {

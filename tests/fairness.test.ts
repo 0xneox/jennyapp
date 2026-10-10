@@ -43,41 +43,55 @@ describe('Oops protection', () => {
     expect(store().lastMistakeForgiven).toBe(false);
   });
 
-  it.each(['zen', 'challenge'] as const)('keeps %s rules', mode => {
+  it.each(['zen', 'normal'] as const)('keeps %s rules', mode => {
     store().setGameMode(mode);
     store().placePuppy(0, 0);
-    for (let i = 0; i < 3; i++) store().placePuppy(0, 1);
-    expect(store().hearts).toBe(mode === 'zen' ? 3 : 0);
-    expect(store().isGameOver).toBe(mode === 'challenge');
+    // Zen: every wrong tap is forgiven (hearts never drain).
+    // Normal: first 3 wrong taps are free heart refills; taps #4 and beyond
+    // start draining. So after 6 wrongs in normal we should hit 0 hearts
+    // and game-over. In Zen after 6 wrongs everything still 3 hearts.
+    const wrongTaps = mode === 'zen' ? 3 : 6;
+    for (let i = 0; i < wrongTaps; i++) store().placePuppy(0, 1);
+    if (mode === 'zen') {
+      expect(store().hearts).toBe(3);
+      expect(store().isGameOver).toBe(false);
+    } else {
+      expect(store().hearts).toBe(0);
+      expect(store().isGameOver).toBe(true);
+    }
     expect(store().engine!.getState().hearts).toBe(store().hearts);
   });
 
   it('does not count taps after game over or outside the board', () => {
-    store().setGameMode('challenge');
+    store().setGameMode('normal');
     store().placePuppy(0, 0);
-    for (let i = 0; i < 3; i++) store().placePuppy(0, 1);
+    // In Normal: 3 free refills + 3 drain taps = 6 wrongs before 0 hearts.
+    for (let i = 0; i < 6; i++) store().placePuppy(0, 1);
     expect(store().placePuppy(2, 3)).toBe(false);
     expect(store().markCell(2, 3)).toBe(false);
     expect(store().requestHint()).toBe(false);
-    expect(store().mistakes).toBe(3);
+    // First 3 wrongs were forgiven; mistakes total = 6 (all attempts count).
+    expect(store().mistakes).toBe(6);
     store().restart();
     store().placePuppy(-1, 0);
     expect(store().mistakes).toBe(0);
   });
 
   it('undo does not refund mistake allowance or hearts', () => {
-    store().setGameMode('challenge');
+    store().setGameMode('normal');
     store().placePuppy(0, 0);
-    store().placePuppy(0, 1);
+    // In Normal: the first 3 wrongs are forgiven; tap #4 drains a heart.
+    // So to land at hearts === 2 we need one heart-draining tap = tap #4.
+    for (let i = 0; i < 4; i++) store().placePuppy(0, 1);
     store().undo();
-    expect(store().mistakes).toBe(1);
+    expect(store().mistakes).toBe(4);
     expect(store().hearts).toBe(2);
   });
 
   it('changing mode restarts the same puzzle without erasing hint costs', () => {
     store().requestHint();
     store().markCell(0, 0);
-    store().setGameMode('challenge');
+    store().setGameMode('zen');
     expect(store().moves).toBe(0);
     expect(store().mistakes).toBe(0);
     expect(store().hintsUsed).toBe(1);
@@ -169,7 +183,7 @@ describe('Restart and stars', () => {
     expect(calculatePawfectStars(1, 20).stars).toBe(0.5);
   });
 
-  it('counts forgiven mistakes against stars in normal/challenge, never in zen', () => {
+  it('counts forgiven mistakes against stars in normal mode, never in zen', () => {
     // Hearts are full (forgiven) but three wrong moves were made
     expect(calculatePawfectStars(3, 0, 3).stars).toBe(1.5);
     expect(calculatePawfectStars(3, 1, 2).stars).toBe(1.5);
@@ -199,6 +213,23 @@ describe('Progression integrity', () => {
     for (const cell of level1.solution) store().placePuppy(cell.row, cell.col);
     expect(store().isComplete).toBe(true);
     expect(store().unlockedLevels).toBe(1);
+  });
+
+  it('leaving a daily challenge restores the campaign level instead of the 0 sentinel', () => {
+    useGameStore.setState({ unlockedLevels: 50 });
+    store().startLevel(50);
+    store().startDailyChallenge();
+    expect(store().currentLevel).toBe(0);
+    for (const cell of level1.solution) store().placePuppy(cell.row, cell.col);
+    expect(store().isComplete).toBe(true);
+    store().setActiveScreen('home');
+    expect(store().isDailyChallenge).toBe(false);
+    expect(store().currentLevel).toBe(50);
+    expect(store().unlockedLevels).toBe(50);
+    // Re-entering the daily from Home and leaving via Map keeps it too.
+    store().startDailyChallenge();
+    store().setActiveScreen('map');
+    expect(store().currentLevel).toBe(50);
   });
 
   it('completing a campaign level unlocks exactly the next one', () => {

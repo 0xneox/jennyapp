@@ -17,7 +17,7 @@ import { CANDY_GOLD, CANDY_SURFACE, CANDY_TEXT } from '../utils/theme';
 
 const PAW_IMAGE = require('../../assets/paw.png');
 
-export type MechanicType = 'cats' | 'linked' | 'twin';
+export type MechanicType = 'cats' | 'linked' | 'twin' | 'hungry';
 
 interface MechanicIntroTutorialProps {
   visible: boolean;
@@ -57,6 +57,14 @@ const SCRIPTS: Record<MechanicType, MechanicScript> = {
     prompt: '👇 Tap the row to see two pups bounce in:',
     jennyLine: 'TWO pups per row, column, and patch now! Double the puppies, double the fun — but they still can\'t touch!',
     successLine: 'Two pups per row — double trouble! You\'ve got this! 🐾',
+    buttonLabel: 'Got it! Let\'s play! 🐕',
+  },
+  hungry: {
+    emoji: '🍽️',
+    title: 'Hungry Beds!',
+    prompt: '👇 Tap to see how a numbered bed eats:',
+    jennyLine: 'Some beds have their OWN appetite! A numbered badge tells you exactly how many pups that patch needs — a 0-bed wants none at all!',
+    successLine: 'Count the badge — hungry beds! You\'ve got this! 🐾',
     buttonLabel: 'Got it! Let\'s play! 🐕',
   },
 };
@@ -315,6 +323,35 @@ export const MechanicIntroTutorial: React.FC<MechanicIntroTutorialProps> = ({
               </View>
             )}
 
+            {/* HUNGRY: a feast bed (needs 3) and a pond bed (needs 0) */}
+            {mechanic === 'hungry' && (
+              <View style={styles.hungryDemo}>
+                <View style={styles.hungryRow}>
+                  <View style={styles.hungryPatch}>
+                    <View style={styles.hungryBadge}>
+                      <Text style={styles.hungryBadgeText}>3</Text>
+                    </View>
+                    {hasTapped ? (
+                      <View style={styles.hungryPups}>
+                        <PuppySprite size={22} breed="corgi" />
+                        <PuppySprite size={22} breed="corgi" />
+                        <PuppySprite size={22} breed="corgi" />
+                      </View>
+                    ) : (
+                      <Text style={styles.patchEmoji}>🌻</Text>
+                    )}
+                  </View>
+                  <View style={styles.hungryPatch}>
+                    <View style={styles.hungryBadge}>
+                      <Text style={styles.hungryBadgeText}>0</Text>
+                    </View>
+                    <Text style={styles.patchEmoji}>{hasTapped ? '🚫' : '⛲'}</Text>
+                  </View>
+                </View>
+                <Text style={styles.twinNote}>Badge = pups that patch needs!</Text>
+              </View>
+            )}
+
             {/* Tap target or success + finish */}
             {!hasTapped ? (
               <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
@@ -414,12 +451,13 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1.5,
     borderColor: CANDY_SURFACE.border,
-    gap: 12,
     alignItems: 'flex-start',
     marginBottom: 16,
   },
   avatarWrapper: {
     marginTop: 2,
+    // replaces dialogueCard gap: 12 for legacy Android compat
+    marginRight: 12,
   },
   speechContent: {
     flex: 1,
@@ -495,7 +533,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     marginBottom: 14,
   },
   linkedPatch: {
@@ -513,6 +550,8 @@ const styles = StyleSheet.create({
   },
   linkedArrow: {
     fontSize: 22,
+    // replaces linkedDemo gap: 8 for legacy Android compat (both sides)
+    marginHorizontal: 8,
   },
   linkedGlowPup: {
     width: '100%',
@@ -520,13 +559,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  hungryDemo: {
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  hungryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hungryPatch: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    borderWidth: 2.5,
+    borderColor: CANDY_GOLD.light,
+    backgroundColor: 'rgba(245, 179, 36, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    // replaces hungryDemo gap: 14 for legacy Android compat (both sides)
+    marginHorizontal: 7,
+  },
+  hungryBadge: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#F5B324',
+    borderWidth: 2,
+    borderColor: CANDY_GOLD.light,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  hungryBadgeText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#4A3000',
+  },
+  hungryPups: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
   twinDemo: {
     alignItems: 'center',
     marginBottom: 14,
   },
   twinRow: {
     flexDirection: 'row',
-    gap: 4,
     backgroundColor: 'rgba(20, 10, 44, 0.55)',
     padding: 8,
     borderRadius: 12,
@@ -542,6 +627,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
+    // replaces twinRow gap: 4 — applied to all but last cell via sibling
+    marginRight: 4,
   },
   twinNote: {
     fontSize: 12,

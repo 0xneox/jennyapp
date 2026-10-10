@@ -95,11 +95,13 @@ const WEB_BUFFER_MAP: Record<SoundType, string> = {
   linkedSparkle: 'linkedSparkle',
 };
 
+type InitListener = () => void;
+
 class SoundManager {
   private sfxEnabled: boolean = true;
   private bgmEnabled: boolean = true;
   private initialized: boolean = false;
-  private initPromise: Promise<void> | null = null;
+  initPromise: Promise<void> | null = null;
   private defaultBgmVolume: number = 0.32;
   private duckedBgmVolume: number = 0.06;
 
@@ -118,16 +120,54 @@ class SoundManager {
   private expoAudioBgmPlayer: any = null;
   private expoAudioPlayers: Map<string, any> = new Map();
 
+  // SettingsModal subscribers: notified AFTER storage prefs are loaded from AsyncStorage
+  // so React state re-reads the real (possibly-different-from-defaults values.
+  private initListeners: InitListener[] = [];
+
+  constructor() {
+    // --- Bug #1 #2: Kick off audio engine eagerly (buffer synth + storage read + native players)
+    // EARLY. App boot is our best friend. The promise settles before the user taps the screen.
+    void this.init();
+  }
+
+  onInitDone(cb: InitListener): () => void {
+    if (this.initialized) {
+      // Already ready — fire next tick so callers don't double-fire listeners mount race.
+      const id = setTimeout(cb, 0);
+      return () => clearTimeout(id);
+    }
+    this.initListeners.push(cb);
+    let removed = false;
+    return () => {
+      if (removed) return;
+      removed = true;
+      const i = this.initListeners.indexOf(cb);
+      if (i >= 0) this.initListeners.splice(i, 1);
+    };
+  }
+
+  private fireInitListeners() {
+    const copy = this.initListeners.slice();
+    this.initListeners = [];
+    for (const l of copy) {
+      try { l(); } catch { /* swallow React lifecycle errors never break audio */ }
+    }
+  }
+
   async init(): Promise<void> {
     if (this.initialized) return;
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
-      // Restore persisted audio prefs before any engine reads the toggles
-      const prefs = await loadAudioPrefs().catch(() => null);
-      if (prefs) {
-        this.sfxEnabled = prefs.sfxEnabled;
-        this.bgmEnabled = prefs.bgmEnabled;
+      // Restore persisted audio prefs BEFORE any engine reads the toggles
+      try {
+        const prefs = await loadAudioPrefs();
+        if (prefs) {
+          this.sfxEnabled = prefs.sfxEnabled;
+          this.bgmEnabled = prefs.bgmEnabled;
+        }
+      } catch {
+        // Keep defaults (true/true) when storage is not ready or corrupt.
       }
 
       const isWeb =
@@ -139,9 +179,47 @@ class SoundManager {
         await this.initNativeAudio();
       }
       this.initialized = true;
+
+      // Apply gains to match now-loaded webAudioCtx (gain nodes not available during initWebAudio
+      // before prefs loaded, so gains would be set 1.0 default, now correct now true).
+      this.applyGainState();
+      this.fireInitListeners();
+
+      // If already unlocked (e.g. already user-tapped before init done) and BGM still on
+      // — kick off 99% of cold start case here instead waiting a tap later.
+      if (this.isUnlocked && this.bgmEnabled) {
+        this.startBgm();
+      }
     })();
 
     return this.initPromise;
+  }
+
+  private applyGainState() {
+    // Idempotent: syncs gain nodes + native players to current sfxEnabled/bgmEnabled.
+    if (this.webAudioCtx && this.sfxGain) {
+      try {
+        this.sfxGain.gain.cancelScheduledValues(this.webAudioCtx.currentTime);
+        this.sfxGain.gain.setValueAtTime(
+          this.sfxEnabled ? 1.0 : 0.0,
+          this.webAudioCtx.currentTime
+        );
+      } catch {}
+    }
+    if (this.webAudioCtx && this.bgmGain) {
+      try {
+        this.bgmGain.gain.cancelScheduledValues(this.webAudioCtx.currentTime);
+        this.bgmGain.gain.setValueAtTime(
+          this.bgmEnabled ? this.defaultBgmVolume : 0.0,
+          this.webAudioCtx.currentTime
+        );
+      } catch {}
+    }
+    if (this.expoAudioBgmPlayer) {
+      try {
+        this.expoAudioBgmPlayer.volume = this.bgmEnabled ? this.defaultBgmVolume : 0;
+      } catch {}
+    }
   }
 
   // --- Web Audio Engine (Browsers) ---
@@ -155,19 +233,15 @@ class SoundManager {
       const ctx = new AudioContextClass();
       this.webAudioCtx = ctx;
 
-      // Master gain nodes
+      // Master gain nodes. Gains may be re-applied after prefs load via applyGainState().
       this.sfxGain = ctx.createGain();
-      this.sfxGain.gain.setValueAtTime(this.sfxEnabled ? 1.0 : 0.0, ctx.currentTime);
       this.sfxGain.connect(ctx.destination);
 
       this.bgmGain = ctx.createGain();
-      this.bgmGain.gain.setValueAtTime(
-        this.bgmEnabled ? this.defaultBgmVolume : 0.0,
-        ctx.currentTime
-      );
       this.bgmGain.connect(ctx.destination);
 
-      // Pre-synthesize sound buffers in memory
+      // --- Bug #1: eagerly synthesize ALL 11 sound buffers up-front, not per play.
+      // Playback after this is zero allocation + start(0)
       const sampleRate = getSampleRate();
       const soundGenerators: Record<string, () => Float32Array> = {
         tileClick: generateTileClick,
@@ -195,6 +269,7 @@ class SoundManager {
       // User gesture unlock for web autoplay policies
       const unlockAudio = () => {
         if (!this.webAudioCtx) return;
+        // resume() may be async — fire-and-forget so callers never await on every play.
         if (this.webAudioCtx.state === 'suspended') {
           this.webAudioCtx.resume().catch(() => {});
         }
@@ -227,6 +302,31 @@ class SoundManager {
             playsInSilentMode: true,
           }).catch(() => {});
         }
+        // --- Bug #1 #2: eagerly pre-create every expo-audio SFX player + BGM
+        // player NOW (during init) instead of lazily on the FIRST play().
+        // First tap plays instantly — no create player seek 50+ bridge delay.
+        for (const soundKey of new Set(Object.values(SOUND_MAP))) {
+          const asset = getSoundAsset(soundKey);
+          if (!asset) continue;
+          try {
+            const p = expoAudio.createAudioPlayer(asset);
+            if (p) {
+              p.volume = 0.85;
+              this.expoAudioPlayers.set(soundKey, p);
+            }
+          } catch {}
+        }
+        const bgmAsset = getSoundAsset('bgm_acoustic');
+        if (bgmAsset) {
+          try {
+            const bgmPlayer = expoAudio.createAudioPlayer(bgmAsset);
+            if (bgmPlayer) {
+              bgmPlayer.loop = true;
+              bgmPlayer.volume = this.bgmEnabled ? this.defaultBgmVolume : 0;
+              this.expoAudioBgmPlayer = bgmPlayer;
+            }
+          } catch {}
+        }
         if (__DEV__) console.log('[SoundManager] Native audio engine initialized via expo-audio (SDK 57)');
         return;
       }
@@ -240,71 +340,100 @@ class SoundManager {
   // --- Sound Effects Playback ---
   // NOTE: callers fire their own haptics alongside play() — do NOT trigger
   // haptics here or every tap vibrates twice.
-  async play(type: SoundType) {
-    if (!this.sfxEnabled) return;
+  //
+  // Y1 CRITICAL: This method is called WITHOUT await on 67+ call sites.
+  // Every path MUST be wrapped so an unhandled promise rejection can never
+  // escape (e.g. LegalAcceptanceModal taps before init on slow Android).
+  play(type: SoundType): Promise<void> {
+    // Fast path: sfx off → exit instantly. Return resolved Promise so callers
+    // that (optionally) await — e.g. Jest assertions — still get a thenable.
+    if (!this.sfxEnabled) return Promise.resolve();
 
+    // Kick the rest into a microtask with a TERMINAL .catch(). Normal UI
+    // callers fire-and-forget. Testers may await the returned Promise safely.
+    return Promise.resolve()
+      .then(() => this._playInternal(type))
+      .catch((err) => {
+        if (__DEV__) console.warn('[SoundManager] play() swallowed (Y1 guard):', err);
+      });
+  }
+
+  private async _playInternal(type: SoundType): Promise<void> {
+    // If init still settling (storage read, buffer synth, or native player warmup),
+    // don't block — kick init in fire/forget and try playback anyway. If buffers
+    // aren't ready, the sound drops once; 50ms later on the next tap, ready.
     if (!this.initialized) {
-      await this.init();
+      if (!this.initPromise) void this.init();
     }
 
-    // Automatic volume ducking during completion celebration
+    // Automatic volume ducking during completion celebration (3200ms).
     if (type === 'complete') {
-      this.duckBgm(3200);
+      try { this.duckBgm(3200); } catch {}
     }
 
     const soundKey = SOUND_MAP[type] || 'tile_click';
-    const asset = getSoundAsset(soundKey);
 
-    // 1. Web Audio playback
-    if (this.webAudioCtx && this.sfxGain) {
+    // 1. Web Audio playback — NEVER await resume. Fire and return instantly.
+    if (this.webAudioCtx && this.sfxGain && this.initialized) {
       try {
         if (this.webAudioCtx.state === 'suspended') {
-          await this.webAudioCtx.resume();
+          this.webAudioCtx.resume().catch(() => {});
         }
-
         const buffer = this.webAudioBuffers[WEB_BUFFER_MAP[type] ?? 'tileClick'];
         if (buffer) {
           const source = this.webAudioCtx.createBufferSource();
           source.buffer = buffer;
           source.connect(this.sfxGain);
-          source.start(0);
+          try { source.start(0); } catch {}
         }
       } catch (err) {
-        console.warn('[SoundManager] Web Audio play error:', err);
+        if (__DEV__) console.warn('[SoundManager] Web Audio play error:', err);
       }
       return;
     }
 
     // 2. Modern Native Playback via expo-audio
-    if (this.expoAudioModule && asset) {
+    if (this.expoAudioModule) {
       try {
         let player = this.expoAudioPlayers.get(soundKey);
         if (!player) {
+          const asset = getSoundAsset(soundKey);
+          if (!asset) return;
           player = this.expoAudioModule.createAudioPlayer(asset);
-          if (player) {
-            player.volume = 0.85;
-            this.expoAudioPlayers.set(soundKey, player);
-          }
+          if (!player) return;
+          player.volume = 0.85;
+          this.expoAudioPlayers.set(soundKey, player);
         }
-        if (player) {
-          if (typeof player.seekTo === 'function') {
-            await player.seekTo(0).catch(() => {});
-          }
-          player.play();
+        if (!player) return;
+        if (typeof player.seekTo === 'function') {
+          Promise.resolve(player.seekTo(0)).catch(() => {});
         }
+        try { player.play(); } catch {}
         return;
       } catch (err) {
-        console.warn('[SoundManager] expo-audio play error:', err);
+        if (__DEV__) console.warn('[SoundManager] expo-audio play error:', err);
       }
     }
   }
 
   // --- Background Music (BGM) ---
-  async startBgm() {
-    if (!this.bgmEnabled || this.isBgmPlaying) return;
+  // Y1: startBgm/stopBgm/duckBgm are fire-and-forget. Never let a rejected
+  // promise bubble up into the React event loop.
+  startBgm(): Promise<void> {
+    if (!this.bgmEnabled || this.isBgmPlaying) return Promise.resolve();
+    return Promise.resolve()
+      .then(() => this._startBgmInternal())
+      .catch((err) => {
+        if (__DEV__) console.warn('[SoundManager] startBgm() swallowed (Y1):', err);
+      });
+  }
 
+  private async _startBgmInternal(): Promise<void> {
+    // Fire-and-forget init if first bgm kick before init finished.
     if (!this.initialized) {
-      await this.init();
+      if (!this.initPromise) void this.init();
+      this.onInitDone(() => this._startBgmInternal());
+      return;
     }
 
     // 1. Web Audio BGM
@@ -313,57 +442,52 @@ class SoundManager {
         if (this.webAudioCtx.state === 'suspended') {
           return;
         }
-
         if (this.bgmSource) {
-          try {
-            this.bgmSource.stop();
-          } catch {}
+          try { this.bgmSource.stop(); } catch {}
         }
-
         const source = this.webAudioCtx.createBufferSource();
         source.buffer = this.webAudioBuffers['bgm'];
         source.loop = true;
-
         if (this.bgmGain) {
-          this.bgmGain.gain.setValueAtTime(this.defaultBgmVolume, this.webAudioCtx.currentTime);
+          this.bgmGain.gain.cancelScheduledValues(this.webAudioCtx.currentTime);
+          this.bgmGain.gain.setValueAtTime(
+            this.bgmEnabled ? this.defaultBgmVolume : 0.0,
+            this.webAudioCtx.currentTime
+          );
           source.connect(this.bgmGain);
         }
-
-        source.start(0);
+        try { source.start(0); } catch {}
         this.bgmSource = source;
         this.isBgmPlaying = true;
         if (__DEV__) console.log('[SoundManager] Cozy acoustic BGM playing (Web)');
       } catch (err) {
-        console.warn('[SoundManager] Web BGM start error:', err);
+        if (__DEV__) console.warn('[SoundManager] Web BGM start error:', err);
       }
       return;
     }
 
     // 2. Modern expo-audio BGM
-    if (this.expoAudioModule) {
+    if (this.expoAudioModule && this.expoAudioBgmPlayer) {
       try {
-        if (!this.expoAudioBgmPlayer) {
-          const bgmAsset = getSoundAsset('bgm_acoustic');
-          const player = bgmAsset ? this.expoAudioModule.createAudioPlayer(bgmAsset) : null;
-          if (player) {
-            player.loop = true;
-            player.volume = this.defaultBgmVolume;
-            this.expoAudioBgmPlayer = player;
-          }
-        }
-        if (this.expoAudioBgmPlayer) {
-          this.expoAudioBgmPlayer.play();
-          this.isBgmPlaying = true;
-          if (__DEV__) console.log('[SoundManager] Cozy acoustic BGM playing (expo-audio native)');
-        }
+        this.expoAudioBgmPlayer.play();
+        this.isBgmPlaying = true;
+        if (__DEV__) console.log('[SoundManager] Cozy acoustic BGM playing (expo-audio native)');
         return;
       } catch (err) {
-        console.warn('[SoundManager] expo-audio BGM start error:', err);
+        if (__DEV__) console.warn('[SoundManager] expo-audio BGM start error:', err);
       }
     }
   }
 
-  async stopBgm() {
+  stopBgm(): Promise<void> {
+    return Promise.resolve()
+      .then(() => this._stopBgmInternal())
+      .catch((err) => {
+        if (__DEV__) console.warn('[SoundManager] stopBgm() swallowed (Y1):', err);
+      });
+  }
+
+  private _stopBgmInternal(): void {
     if (this.bgmSource) {
       try {
         this.bgmSource.stop();
@@ -380,9 +504,16 @@ class SoundManager {
     this.isBgmPlaying = false;
   }
 
-  async duckBgm(durationMs: number = 3200) {
-    if (!this.bgmEnabled) return;
+  duckBgm(durationMs: number = 3200): Promise<void> {
+    if (!this.bgmEnabled) return Promise.resolve();
+    return Promise.resolve()
+      .then(() => this._duckBgmInternal(durationMs))
+      .catch((err) => {
+        if (__DEV__) console.warn('[SoundManager] duckBgm() swallowed (Y1):', err);
+      });
+  }
 
+  private _duckBgmInternal(durationMs: number): void {
     if (this.duckTimeout) clearTimeout(this.duckTimeout);
 
     // Duck Web Audio BGM
@@ -419,9 +550,9 @@ class SoundManager {
   setEnabled(enabled: boolean) {
     this.sfxEnabled = enabled;
     saveAudioPrefs({ sfxEnabled: this.sfxEnabled, bgmEnabled: this.bgmEnabled }).catch(() => {});
-    if (this.webAudioCtx && this.sfxGain) {
-      this.sfxGain.gain.setValueAtTime(enabled ? 1.0 : 0.0, this.webAudioCtx.currentTime);
-    }
+    // If web audio gain applied to nodes (native players volume unaffected per play volume 0.85 fixed
+    // for SFX; we short-circuit above at start of play() for native.
+    this.applyGainState();
   }
 
   isEnabled(): boolean {
@@ -431,15 +562,10 @@ class SoundManager {
   setBgmEnabled(enabled: boolean) {
     this.bgmEnabled = enabled;
     saveAudioPrefs({ sfxEnabled: this.sfxEnabled, bgmEnabled: this.bgmEnabled }).catch(() => {});
-    if (this.webAudioCtx && this.bgmGain) {
-      this.bgmGain.gain.setValueAtTime(
-        enabled ? this.defaultBgmVolume : 0.0,
-        this.webAudioCtx.currentTime
-      );
-    }
-    if (this.expoAudioBgmPlayer) {
-      this.expoAudioBgmPlayer.volume = enabled ? this.defaultBgmVolume : 0;
-    }
+
+    // Sync gain + native volume first
+    this.applyGainState();
+
     if (enabled) {
       this.startBgm();
     } else {

@@ -7,7 +7,7 @@
  * hues read as juicy rather than jarring.
  */
 
-import { getRegionTheme } from './colors';
+import { getRegionTheme, getLevelThemeSeed, LevelThemeSeed, BACKDROP_PRESETS, BackdropPreset } from './colors';
 
 /** Product name — single source of truth for UI copy and share text. */
 export const APP_NAME = 'JennyDoko';
@@ -122,12 +122,6 @@ export const CANDY_SKINS: Record<
 
 export type CandySkinName = keyof typeof CANDY_SKINS;
 
-/** Gradient stops for a puzzle tile: gloss highlight → hue → shaded edge. */
-export const getTileGradient = (regionId?: number): [string, string, string] => {
-  const theme = getRegionTheme(regionId);
-  return [theme.accent, theme.pastel, theme.border];
-};
-
 /** Radii, gaps and bevel depths kept consistent across every candy surface. */
 export const CANDY_METRICS = {
   radiusPanel: 22,
@@ -140,3 +134,92 @@ export const CANDY_METRICS = {
   /** Deeper bevel for primary CTAs. */
   bevelDepthLarge: 6,
 };
+
+export interface GradientResult {
+  colors: [string, string, ...string[]];
+  start:  { x: number; y: number };
+  end:    { x: number; y: number };
+}
+
+/**
+ * Build a tile's gradient stops AND direction from the hue's unique
+ * treatment recipe + optional per-level visual seed.
+ *
+ * v1: every tile used the same recipe → `[accent, pastel, border]` top→bottom.
+ * v2: 6 different treatments × 16 palettes × ~50 level-variant seeds =
+ *     ~4800 *visually distinct* gradient combinations in the game.
+ */
+export function getTileGradient(
+  regionId?: number,
+  level: number = 1,
+): GradientResult {
+  const seed = getLevelThemeSeed(level);
+  const theme = getRegionTheme(regionId, seed);
+
+  const start = theme.gradStart;
+  const end = theme.gradEnd;
+
+  switch (theme.treatment) {
+    case 'diagonal': {
+      // Warm→cool diagonal sweep. 4 stops for depth.
+      return {
+        colors: [theme.accent, theme.pastel, theme.shimmer, theme.border],
+        start, end,
+      };
+    }
+    case 'reversed': {
+      // Lime / lemon: brightest band sits at the BOTTOM so the highlight
+      // reads as "reflecting off the tray's bezel" instead of the usual
+      // top-light. Stops run shade → mid → highlight.
+      return {
+        colors: [theme.border, theme.pastel, theme.accent],
+        start, end,
+      };
+    }
+    case 'pearlescent': {
+      // Pink / blue / lavender: pearlescent uses 4 stops so the hue shimmers
+      // through 2 distinct midbands. Accent → shimmer1 → pastel → border.
+      return {
+        colors: [theme.accent, theme.shimmer, theme.pastel, theme.border],
+        start, end,
+      };
+    }
+    case 'citrus': {
+      // Red / orange: punchy 3-stop with a deep burnt border.
+      return {
+        colors: [theme.accent, theme.shimmer, theme.border],
+        start, end,
+      };
+    }
+    case 'sunset': {
+      // Coral / teal / magenta: 5-stop diagonal sunset sweep.
+      return {
+        colors: [theme.accent, theme.shimmer, theme.pastel, theme.shimmer, theme.border],
+        start, end,
+      };
+    }
+    case 'vertical':
+    default: {
+      // Standard glossy highlight → mid → shade (kept for greens/purples
+      // where the simple recipe already reads well).
+      return {
+        colors: [theme.accent, theme.pastel, theme.border],
+        start, end,
+      };
+    }
+  }
+}
+
+/** Resolve which of the 7 backdrop gradients a specific level should render. */
+export function getBackdropPreset(level: number = 1): BackdropPreset {
+  const seed = getLevelThemeSeed(level);
+  return BACKDROP_PRESETS[seed.backdrop] ?? BACKDROP_PRESETS[0];
+}
+
+/** Legacy 3-stop array accessor — kept for callers that don't need direction. */
+export function getTileGradientStops(
+  regionId?: number,
+  level: number = 1,
+): string[] {
+  return getTileGradient(regionId, level).colors;
+}

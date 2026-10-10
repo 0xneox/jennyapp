@@ -1,5 +1,8 @@
 export type CellValue = 'empty' | 'puppy' | 'marked' | 'cat';
 
+/** Highest playable campaign level. */
+export const MAX_LEVEL = 1200;
+
 export interface Cell {
   row: number;
   col: number;
@@ -14,6 +17,13 @@ export interface Region {
    * two far-apart flower beds that share a single puppy.
    */
   linked?: boolean;
+  /**
+   * Hungry beds: overrides the board-wide puppy quota for THIS region only.
+   * e.g. a "feast bed" needs 3 pups while a "pond" needs 0 on a quota-2
+   * board. Row/column quotas are unchanged — the deltas across all regions
+   * always sum to zero. Undefined = use the board quota.
+   */
+  requiredPups?: number;
 }
 
 export interface Board {

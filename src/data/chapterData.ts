@@ -12,32 +12,32 @@ export interface Chapter {
 }
 
 const CHAPTER_THEMES = [
-  // Chapters 1-5: Handcrafted campaign ramp (Levels 1-100, 4x4 up to 10x10)
-  { title: 'Sunny Backyard', icon: '🏡', color: '#4CAF50', diff: 'Beginner', size: '4×4–6×6', desc: 'Learn the puppy rules with gentle grassy puzzles in the cozy backyard.' },
-  { title: 'Neighborhood Park', icon: '🌳', color: '#8BC34A', diff: 'Easy', size: '6×6 & 7×7', desc: 'Stroll along winding walkways and shady trees with playful pups.' },
-  { title: 'Clover Meadow', icon: '🍀', color: '#66BB6A', diff: 'Medium', size: '7×7 & 8×8', desc: 'Open green fields where lucky four-leaf clovers bring happy naps.' },
-  { title: 'Lavender Lane', icon: '🪻', color: '#AB47BC', diff: 'Hard', size: '8×8 & 9×9', desc: 'Sweet aromatic flower beds where sleepy puppies love to curl up.' },
-  { title: 'Daisy Meadow', icon: '🌼', color: '#FDD835', diff: 'Expert', size: '9×9 & 10×10', desc: 'Bright yellow blossoms provide the sunniest spots in the meadow.' },
-  // Chapters 6-10: Backyard & Garden Adventures (Levels 101-200, 5x5)
-  { title: 'Bluebell Grove', icon: '🪻', color: '#42A5F5', diff: 'Easy', size: '5×5', desc: 'Shaded glens where gentle blue bells chime softly in the breeze.' },
-  { title: 'Buttercup Hill', icon: '🌻', color: '#FFA726', diff: 'Easy', size: '5×5', desc: 'Rolling hills sprinkled with golden petals and cheerful puppy barks.' },
-  { title: 'Pebble Creek', icon: '🏞️', color: '#26A69A', diff: 'Easy', size: '5×5', desc: 'A gentle babbling brook where curious puppies splash and play.' },
-  { title: 'Cozy Gazebo', icon: '🛖', color: '#8D6E63', diff: 'Easy', size: '5×5', desc: 'A sheltered wooden retreat with soft cushions and garden views.' },
-  { title: 'Rosewood Garden', icon: '🌹', color: '#EC407A', diff: 'Easy', size: '5×5', desc: 'Fragrant garden paths winding through vibrant rose arbors.' },
+  // Chapters 1-5: Handcrafted campaign ramp (Levels 1-100, SORTED by gridSize ASC)
+  { title: 'Sunny Backyard', icon: '🏡', color: '#4CAF50', diff: 'Beginner', size: '4×4–5×5', desc: 'Learn the puppy rules with gentle grassy puzzles in the cozy backyard. Single-cell patches teach you free placements!' },
+  { title: 'Neighborhood Park', icon: '🌳', color: '#8BC34A', diff: 'Easy', size: '5×5–6×6', desc: 'Stroll along winding walkways and shady trees with playful pups. Bigger patches, more to untangle.' },
+  { title: 'Clover Meadow', icon: '🍀', color: '#66BB6A', diff: 'Medium', size: '6×6–7×7', desc: 'Open green fields where lucky four-leaf clovers bring happy naps.' },
+  { title: 'Lavender Lane', icon: '🪻', color: '#AB47BC', diff: 'Hard', size: '7×7–8×8', desc: 'Sweet aromatic flower beds where sleepy puppies love to curl up.' },
+  { title: 'Daisy Meadow', icon: '🌼', color: '#FDD835', diff: 'Expert', size: '8×8–9×9', desc: 'Bright yellow blossoms provide the sunniest spots in the meadow. Last of the handcrafted set!' },
+  // Chapters 6-10: Chains warmup (Levels 101-200) — grid 5×5 → 6×6 ramp
+  { title: 'Bluebell Grove', icon: '🪻', color: '#42A5F5', diff: 'Beginner', size: '5×5', desc: 'Shaded glens where gentle blue bells chime softly in the breeze.' },
+  { title: 'Buttercup Hill', icon: '🌻', color: '#FFA726', diff: 'Beginner', size: '5×5', desc: 'Rolling hills sprinkled with golden petals and cheerful puppy barks.' },
+  { title: 'Pebble Creek', icon: '🏞️', color: '#26A69A', diff: 'Beginner', size: '5×5', desc: 'A gentle babbling brook where curious puppies splash and play.' },
+  { title: 'Cozy Gazebo', icon: '🛖', color: '#8D6E63', diff: 'Beginner / Easy', size: '5×5 → 6×6', desc: 'A sheltered wooden retreat with soft cushions and garden views. Grid grows halfway through!' },
+  { title: 'Rosewood Garden', icon: '🌹', color: '#EC407A', diff: 'Easy', size: '6×6', desc: 'Fragrant garden paths winding through vibrant rose arbors.' },
 
-  // Chapters 11-15: Grumpy Cats move in (Levels 201-300, 6x6)
-  { title: 'Maple Glade', icon: '🍁', color: '#EF5350', diff: 'Easy / Medium', size: '6×6', desc: 'A grumpy cat naps in the leaves! 😾 No pup may touch her — or her 8 neighbours.' },
-  { title: 'Birch Hollow', icon: '🌲', color: '#78909C', diff: 'Medium', size: '6×6', desc: 'Tall white birches, and a very sleepy cat who demands personal space.' },
-  { title: 'Willow Pond', icon: '🦆', color: '#29B6F6', diff: 'Medium', size: '6×6', desc: 'The pond cat hates wet paws — keep every puppy out of her splash zone.' },
-  { title: 'Pinecone Trail', icon: '🌲', color: '#5D4037', diff: 'Medium', size: '6×6', desc: 'Two grumpy cats claim this trail. Pups must route around both auras.' },
-  { title: 'Sunlit Ridge', icon: '⛰️', color: '#FF7043', diff: 'Medium', size: '6×6', desc: 'Twin cats bask on the ridge — the meadow just got trickier!' },
+  // Chapters 11-15: Grumpy Cats move in (Levels 201-300, 6×6 → 7×7 ramp)
+  { title: 'Maple Glade', icon: '🍁', color: '#EF5350', diff: 'Easy', size: '6×6', desc: 'A grumpy cat naps in the leaves! 😾 No pup may touch her — or her 8 neighbours.' },
+  { title: 'Birch Hollow', icon: '🌲', color: '#78909C', diff: 'Easy / Medium', size: '6×6', desc: 'Tall white birches, and a very sleepy cat who demands personal space.' },
+  { title: 'Willow Pond', icon: '🦆', color: '#29B6F6', diff: 'Medium', size: '6×6 → 7×7', desc: 'The pond cat hates wet paws — and halfway through, the meadow grows larger!' },
+  { title: 'Pinecone Trail', icon: '🌲', color: '#5D4037', diff: 'Medium', size: '7×7', desc: 'Two grumpy cats claim this trail. Pups must route around both auras.' },
+  { title: 'Sunlit Ridge', icon: '⛰️', color: '#FF7043', diff: 'Medium', size: '7×7', desc: 'Twin cats bask on the ridge — the meadow just got trickier!' },
 
-  // Chapters 16-20: Linked Beds (Levels 301-400, 6x6)
-  { title: 'Goldenrod Way', icon: '🌾', color: '#FBC02D', diff: 'Medium', size: '6×6', desc: 'Magic pollen links two distant beds 🔗 — they share a single pup!' },
-  { title: 'Fern Valley', icon: '🌿', color: '#388E3C', diff: 'Medium', size: '6×6', desc: 'Secret linked clearings: far-apart patches count as one colour.' },
-  { title: 'Orchard Lane', icon: '🍎', color: '#D32F2F', diff: 'Medium', size: '6×6', desc: 'Linked apple beds on opposite sides of the orchard share one sleepy pup.' },
-  { title: 'Breeze Point', icon: '🪁', color: '#00ACC1', diff: 'Medium', size: '6×6', desc: 'Kite strings tangle two beds together — one pup covers both.' },
-  { title: 'Mushroom Glade', icon: '🍄', color: '#E64A19', diff: 'Medium', size: '6×6', desc: 'Fairy rings link distant mushroom beds — two linked pairs to untangle.' },
+  // Chapters 16-20: Linked Beds debut (Levels 301-400, 7×7 steady)
+  { title: 'Goldenrod Way', icon: '🌾', color: '#FBC02D', diff: 'Medium', size: '7×7', desc: 'Magic pollen links two distant beds 🔗 — they share a single pup!' },
+  { title: 'Fern Valley', icon: '🌿', color: '#388E3C', diff: 'Medium', size: '7×7', desc: 'Secret linked clearings: far-apart patches count as one colour.' },
+  { title: 'Orchard Lane', icon: '🍎', color: '#D32F2F', diff: 'Medium', size: '7×7', desc: 'Linked apple beds on opposite sides of the orchard share one sleepy pup.' },
+  { title: 'Breeze Point', icon: '🪁', color: '#00ACC1', diff: 'Medium', size: '7×7', desc: 'Kite strings tangle two beds together — one pup covers both.' },
+  { title: 'Mushroom Glade', icon: '🍄', color: '#E64A19', diff: 'Medium', size: '7×7', desc: 'Fairy rings link distant mushroom beds — two linked pairs to untangle.' },
 
   // Chapters 21-30: Cats + Linked Beds combo (Levels 401-600, 7x7)
   { title: 'Highland Heather', icon: '🪻', color: '#7E57C2', diff: 'Medium / Hard', size: '7×7', desc: 'Grumpy cats doze in the heather while linked beds span the hills.' },
@@ -51,29 +51,43 @@ const CHAPTER_THEMES = [
   { title: 'Timber Creek', icon: '🪵', color: '#4E342E', diff: 'Hard', size: '7×7', desc: 'Log bridges link the banks; two cats nap mid-trail.' },
   { title: 'Emerald Vista', icon: '🌄', color: '#2E7D32', diff: 'Hard', size: '7×7', desc: 'The combo finale — every cat aura and linked bed at once.' },
 
-  // Chapters 31-40: Twin Puppies debut (Levels 601-800, 8x8)
-  { title: 'Alpine Meadow', icon: '🏔️', color: '#3949AB', diff: 'Hard / Expert', size: '8×8', desc: 'Twin pups arrive! 👯 Every row, column and patch now needs TWO puppies.' },
-  { title: 'Cedar Pass', icon: '🌲', color: '#00695C', diff: 'Expert', size: '8×8', desc: 'Sixteen pups, eight rows — the twins still refuse to touch.' },
+  // Chapters 31-40: Twin Puppies debut (Levels 601-800, 8×8 → 9×9 ramp)
+  { title: 'Alpine Meadow', icon: '🏔️', color: '#3949AB', diff: 'Hard', size: '8×8', desc: 'Twin pups arrive! 👯 Every row, column and patch now needs TWO puppies.' },
+  { title: 'Cedar Pass', icon: '🌲', color: '#00695C', diff: 'Hard / Expert', size: '8×8', desc: 'Sixteen pups, eight rows — the twins still refuse to touch.' },
   { title: 'Silver Mist Trail', icon: '🌫️', color: '#546E7A', diff: 'Expert', size: '8×8', desc: 'Mist hides twin pairs — pure chain deduction through the fog.' },
-  { title: 'Starlight Glade', icon: '✨', color: '#512DA8', diff: 'Expert', size: '8×8', desc: 'Twin pups sparkle in pairs across the starlit glade.' },
-  { title: 'Echo Canyon', icon: '📢', color: '#AD1457', diff: 'Expert', size: '8×8', desc: 'Twin pups echo across the canyon — mirrored placements everywhere.' },
-  { title: 'Granite Falls', icon: '💦', color: '#0277BD', diff: 'Expert', size: '8×8', desc: 'Waterfall mists where twin pups double every deduction.' },
-  { title: 'Thistlewood', icon: '🌾', color: '#6A1B9A', diff: 'Expert', size: '8×8', desc: 'Thorny twin trails — and now a linked bed crosses the ravine.' },
-  { title: 'Golden Summit', icon: '👑', color: '#F57F17', diff: 'Expert', size: '8×8', desc: 'Summit twins plus linked beds below — expert terrain.' },
-  { title: 'Autumn Gorge', icon: '🍂', color: '#D84315', diff: 'Expert', size: '8×8', desc: 'Crimson gorges where twin pups and links chain together.' },
-  { title: 'Thunder Ridge', icon: '⚡', color: '#4527A0', diff: 'Expert', size: '8×8', desc: 'Storms scatter twin pups across linked beds on the ridge.' },
+  { title: 'Starlight Glade', icon: '✨', color: '#512DA8', diff: 'Expert', size: '8×8 → 9×9', desc: 'Twin pups sparkle in pairs — and halfway the meadow grows to 9×9!' },
+  { title: 'Echo Canyon', icon: '📢', color: '#AD1457', diff: 'Expert', size: '9×9', desc: 'Twin pups echo across the canyon — mirrored placements everywhere.' },
+  { title: 'Granite Falls', icon: '💦', color: '#0277BD', diff: 'Expert', size: '9×9', desc: 'Waterfall mists where twin pups double every deduction.' },
+  { title: 'Thistlewood', icon: '🌾', color: '#6A1B9A', diff: 'Expert', size: '9×9', desc: 'Thorny twin trails — and now a linked bed crosses the ravine.' },
+  { title: 'Golden Summit', icon: '👑', color: '#F57F17', diff: 'Expert', size: '9×9', desc: 'Summit twins plus linked beds below — expert terrain.' },
+  { title: 'Autumn Gorge', icon: '🍂', color: '#D84315', diff: 'Expert', size: '9×9', desc: 'Crimson gorges where twin pups and links chain together.' },
+  { title: 'Thunder Ridge', icon: '⚡', color: '#4527A0', diff: 'Expert', size: '9×9', desc: 'Storms scatter twin pups across linked beds on the ridge.' },
 
-  // Chapters 41-50: Grand Championship Arenas (Levels 801-1000, 9x9 & 10x10)
+  // Chapters 41-50: Grand Championship Arenas (Levels 801-1000, 9×9 → 10×10 ramp)
   { title: 'Grand Valley', icon: '🏞️', color: '#1565C0', diff: 'Expert', size: '9×9', desc: 'Twin pups patrol 9×9 valleys — 18 puppies per board!' },
   { title: 'Sapphire Basin', icon: '💠', color: '#00838F', diff: 'Expert', size: '9×9', desc: 'Deep-blue basins with twin pups and a grumpy guardian cat.' },
   { title: 'Royal Orchard', icon: '👑', color: '#6A1B9A', diff: 'Master', size: '9×9', desc: 'The palace cat watches over twin pups in royal linked beds.' },
-  { title: 'Emerald Haven', icon: '🍀', color: '#1B5E20', diff: 'Master', size: '9×9', desc: 'Sanctuary puzzles demanding chained deductions and twin logic.' },
-  { title: 'Sunset Coliseum', icon: '🏟️', color: '#E65100', diff: 'Master', size: '9×9', desc: 'Championship twin-pup arenas under the setting sun.' },
+  { title: 'Emerald Haven', icon: '🍀', color: '#1B5E20', diff: 'Master', size: '9×9 → 10×10', desc: 'Sanctuary puzzles demanding chained deductions — grid balloons to 10×10 at the halfway mark!' },
+  { title: 'Sunset Coliseum', icon: '🏟️', color: '#E65100', diff: 'Master', size: '10×10', desc: 'Championship twin-pup arenas under the setting sun.' },
   { title: 'Olympus Park', icon: '🏛️', color: '#283593', diff: 'Master', size: '10×10', desc: 'Epic 10×10 arenas — 20 twin pups, cats, and linked beds!' },
   { title: 'Diamond Glade', icon: '💎', color: '#006064', diff: 'Master', size: '10×10', desc: 'Flawless chains reveal the crown jewel of linked gardens.' },
   { title: 'Celestial Garden', icon: '🌌', color: '#311B92', diff: 'Master / Legend', size: '10×10', desc: 'Constellation cats and linked starlight beds — cosmic twins.' },
   { title: 'Grandmaster Meadow', icon: '🎖️', color: '#B71C1C', diff: 'Legend', size: '10×10', desc: 'Every mechanic at once: twins, cats, links, and deep chains.' },
   { title: 'Jenny’s Sanctuary', icon: '🐾', color: '#C2185B', diff: 'Legend', size: '10×10', desc: 'The legendary 1,000th level! All 20 twin pups safely in their sunny spots!' },
+
+  // Chapters 51-60: The Encore Expedition (Levels 1001-1200, all 10×10)
+  // Hungry Beds debut — regions with their own pup count — interleaved with
+  // quota-2 remix chapters pushing cats/links to 3 for the first time.
+  { title: 'Rainbow Falls', icon: '🌈', color: '#00897B', diff: 'Legend', size: '10×10', desc: 'Beyond the sanctuary! Triple linked beds shimmer under the rainbow mist.' },
+  { title: 'Hungry Hollow', icon: '🍽️', color: '#F4511E', diff: 'Legend', size: '10×10', desc: 'Hungry beds arrive! 🍽️ Numbered patches demand their OWN pup count — the pond wants 0, the feast bed wants 4!' },
+  { title: 'Whisker Woods', icon: '🌲', color: '#33691E', diff: 'Legend', size: '10×10', desc: 'Three grumpy cats claim these woods at once — the largest feline territory yet!' },
+  { title: 'Pond Blossom', icon: '⛲', color: '#039BE5', diff: 'Legend', size: '10×10', desc: 'The pond bed wants ZERO pups while the feast bed next door hungers for 4!' },
+  { title: 'Foxglove Maze', icon: '🦊', color: '#6D4C41', diff: 'Legend', size: '10×10', desc: 'Peak remix: three cats AND three linked beds tangle the foxglove paths.' },
+  { title: 'Banquet Bluffs', icon: '🏔️', color: '#5E35B1', diff: 'Legend', size: '10×10', desc: 'Lighter beds join the feast — four labelled patches to satisfy at once.' },
+  { title: 'Moonlit Meadow', icon: '🌙', color: '#3949AB', diff: 'Legend', size: '10×10', desc: 'A calm night remix — one cat, two links, pure deduction under the stars.' },
+  { title: 'Saffron Springs', icon: '🌼', color: '#FFB300', diff: 'Legend', size: '10×10', desc: 'The pond returns with a cat on watch — 0 pups by the water, 4 at the feast.' },
+  { title: 'Velvet Valley', icon: '🎀', color: '#AD1457', diff: 'Legend', size: '10×10', desc: 'Hungry pairs weave through linked beds — every label matters.' },
+  { title: 'Aurora Apex', icon: '🌌', color: '#311B92', diff: 'Legend', size: '10×10', desc: 'The true finale: ponds, feasts, cats and links — everything Jenny taught you, at once!' },
 ];
 
 export const CHAPTERS: Chapter[] = CHAPTER_THEMES.map((theme, idx) => {

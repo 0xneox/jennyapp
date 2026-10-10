@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { CandyPanel } from './candy/CandyPanel';
 import { CandyButton } from './candy/CandyButton';
@@ -17,42 +18,63 @@ interface LegalDocumentModalProps {
  * absolute-fill overlay so it can sit on top of the settings modal.
  */
 export const LegalDocumentModal: React.FC<LegalDocumentModalProps> = ({ doc, onClose }) => {
+  const insets = useSafeAreaInsets();
   if (!doc) return null;
 
   return (
-    <View style={styles.overlay}>
+    <View
+      pointerEvents={doc ? 'auto' : 'none'}
+      style={[
+        styles.overlay,
+        {
+          paddingTop: Math.max(12, insets.top),
+          paddingBottom: Math.max(12, insets.bottom),
+          paddingLeft: Math.max(20, insets.left),
+          paddingRight: Math.max(20, insets.right),
+        },
+      ]}
+    >
       <CandyPanel style={styles.modal} contentStyle={styles.modalFace}>
-        <View style={styles.header}>
-          <Text style={styles.title}>📜 {doc.title}</Text>
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onClose();
-            }}
-            style={styles.closeIcon}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        {/* Intermediate flex column so ScrollView fills the leftover space
+            between the sticky header and the sticky Close button. */}
+        <View style={styles.innerColumn}>
+          <View style={styles.header}>
+            <Text style={styles.title}>📜 {doc.title}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onClose();
+              }}
+              style={styles.closeIcon}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.closeIconText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.updated}>Last updated: {doc.lastUpdated}</Text>
+
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.closeIconText}>✕</Text>
-          </TouchableOpacity>
+            {doc.sections.map((section) => (
+              <View key={section.heading} style={styles.section}>
+                <Text style={styles.sectionHeading}>{section.heading}</Text>
+                <Text style={styles.sectionBody}>{section.body}</Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          <CandyButton
+            block
+            skin="neutral"
+            label="Close"
+            onPress={onClose}
+            style={styles.closeButton}
+          />
         </View>
-        <Text style={styles.updated}>Last updated: {doc.lastUpdated}</Text>
-
-        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-          {doc.sections.map((section) => (
-            <View key={section.heading} style={styles.section}>
-              <Text style={styles.sectionHeading}>{section.heading}</Text>
-              <Text style={styles.sectionBody}>{section.body}</Text>
-            </View>
-          ))}
-        </ScrollView>
-
-        <CandyButton
-          block
-          skin="neutral"
-          label="Close"
-          onPress={onClose}
-          style={styles.closeButton}
-        />
       </CandyPanel>
     </View>
   );
@@ -65,21 +87,40 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(14, 6, 32, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: 'rgba(14, 6, 32, 0.90)',
+    // NOT justifyContent:'center' — that would compress the flex column
+    // children into their intrinsic (unscrollable) content size.
     zIndex: 1100,
-    padding: 20,
   },
   modal: {
     width: '100%',
-    maxWidth: 420,
-    maxHeight: '85%',
+    maxWidth: 460,
+    // Critical: the wrapper must be a flex:1 participant so it inherits a
+    // BOUNDED height from the inset-padded overlay. Without this, the panel
+    // is height:undefined and the ScrollView below expands to full content
+    // height (no scroll).
+    flex: 1,
+    maxHeight: '100%',
+    // Panel sits flush with overlay inset padding; this keeps the shadow
+    // comfortably visible against the dim.
+    alignSelf: 'center',
   },
   modalFace: {
-    padding: 22,
+    padding: 20,
     borderColor: CANDY_GOLD.base,
     borderWidth: 2,
+    // LinearGradient has no implicit flex — it must inherit the bounded
+    // outer frame so our inner column can lay out with a known leftover
+    // space for the ScrollView.
+    flex: 1,
+    flexDirection: 'column',
+    // Face overflow is already 'hidden' from CandyPanel defaults — keep it
+    // so the ScrollView's scroll indicator stays inside the rounded bevel.
+  },
+  innerColumn: {
+    flex: 1,
+    minHeight: 0,
+    flexDirection: 'column',
   },
   header: {
     flexDirection: 'row',
@@ -117,7 +158,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   scroll: {
-    flexGrow: 0,
+    // flex:1 means the ScrollView consumes all *leftover* vertical space
+    // between the header+updated and the Close button. With a bounded
+    // parent this produces the clipped frame that enables scrolling.
+    flex: 1,
+    minHeight: 0,
+  },
+  scrollContent: {
+    // Bottom padding inside the scrollable region so the last paragraph
+    // isn't flush against the Close button's top margin — guarantees the
+    // user can always read every line.
+    paddingBottom: 8,
   },
   section: {
     marginBottom: 14,

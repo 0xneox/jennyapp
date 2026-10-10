@@ -64,7 +64,9 @@ export class PuzzleSolver {
     const quota = this.quota;
     const cells = this.board.cells;
     const regionOf = new Int32Array(size * size).fill(-1);
+    const regNeed = new Map<number, number>();
     for (const region of this.board.regions) {
+      regNeed.set(region.id, region.requiredPups ?? quota);
       for (const cell of region.cells) regionOf[cell.row * size + cell.col] = region.id;
     }
     const blocked = new Uint8Array(size * size);
@@ -103,7 +105,7 @@ export class PuzzleSolver {
     }
     for (let r = 0; r < size; r++) if (rowPups[r] > quota) return null;
     for (let c = 0; c < size; c++) if (colPups[c] > quota) return null;
-    for (const n of regPups.values()) if (n > quota) return null;
+    for (const [id, n] of regPups) if (n > (regNeed.get(id) ?? quota)) return null;
 
     const grid: boolean[][] = fixed.map(row => row.slice());
     const added: { row: number; col: number }[] = [];
@@ -123,7 +125,7 @@ export class PuzzleSolver {
       if (r === size) {
         for (let c = 0; c < size; c++) if (colPups[c] !== quota) return false;
         for (const region of this.board.regions) {
-          if ((regPups.get(region.id) ?? 0) !== quota) return false;
+          if ((regPups.get(region.id) ?? 0) !== (region.requiredPups ?? quota)) return false;
         }
         return true;
       }
@@ -137,7 +139,7 @@ export class PuzzleSolver {
       for (let c = start; c < size; c++) {
         if (grid[r][c] || blocked[r * size + c] || colPups[c] >= quota) continue;
         const id = regionOf[r * size + c];
-        if ((regPups.get(id) ?? 0) >= quota || touches(r, c)) continue;
+        if ((regPups.get(id) ?? 0) >= (regNeed.get(id) ?? quota) || touches(r, c)) continue;
         grid[r][c] = true;
         rowPups[r]++;
         colPups[c]++;
@@ -179,7 +181,7 @@ export class PuzzleSolver {
       const puppyCount = region.cells.filter(
         cell => this.board.cells[cell.row][cell.col].value === 'puppy'
       ).length;
-      const needed = this.quota - puppyCount;
+      const needed = (region.requiredPups ?? this.quota) - puppyCount;
 
       // Every remaining empty cell must hold a pup when the count matches
       if (needed > 0 && emptyCells.length === needed) {
@@ -245,6 +247,9 @@ export class PuzzleSolver {
       const row = Array.from(rowsSet)[0];
       const region = this.board.regions.find(r => r.id === regionId);
       if (!region) continue;
+      // Only sound when the region supplies the row's ENTIRE quota; a hungry
+      // bed needing fewer/more pups can't prove the rest of the row is empty.
+      if ((region.requiredPups ?? this.quota) !== this.quota) continue;
 
       let rowPups = 0;
       for (let c = 0; c < size; c++) {
@@ -292,6 +297,9 @@ export class PuzzleSolver {
       const col = Array.from(colsSet)[0];
       const region = this.board.regions.find(r => r.id === regionId);
       if (!region) continue;
+      // Same guard as the row rule: a hungry bed with a custom requirement
+      // doesn't prove the rest of the column is empty.
+      if ((region.requiredPups ?? this.quota) !== this.quota) continue;
 
       let colPups = 0;
       for (let r = 0; r < size; r++) {
@@ -424,7 +432,8 @@ export class PuzzleSolver {
         }
       }
 
-      if (puppyCount === this.quota && puppyCell) {
+      const need = region.requiredPups ?? this.quota;
+      if (puppyCount === need && puppyCell) {
         const eliminatedCells: { row: number; col: number }[] = [];
         for (const cell of region.cells) {
           if (
@@ -439,7 +448,7 @@ export class PuzzleSolver {
           deductions.push({
             technique: 'region_elimination',
             affectedCell: puppyCell,
-            explanation: `Region ${region.id} already has a dog, so all other cells in this region can be marked as X.`,
+            explanation: `Region ${region.id} already has ${need === 1 ? 'its dog' : `its ${need} dogs`}, so all other cells in this region can be marked as X.`,
             eliminatedCells,
             difficultyValue: 1,
           });
@@ -618,6 +627,10 @@ export class PuzzleSolver {
     const size = this.board.gridSize;
     const quota = this.quota;
     const regionCells = this.board.regions;
+    const regNeed = new Map<number, number>();
+    for (const region of regionCells) {
+      regNeed.set(region.id, region.requiredPups ?? quota);
+    }
 
     const propagate = (): void => {
       let changed = true;
@@ -659,7 +672,9 @@ export class PuzzleSolver {
               }
             }
 
-            if (rowPups >= quota || colPups >= quota || regPups >= quota || touchesPupOrCat) {
+            if (rowPups >= quota || colPups >= quota ||
+                (regId !== undefined && regPups >= (regNeed.get(regId) ?? quota)) ||
+                touchesPupOrCat) {
               cells[r][c].value = 'marked';
               changed = true;
             }
@@ -672,8 +687,8 @@ export class PuzzleSolver {
 
     // A unit is contradictory when puppies already placed exceed the quota,
     // or placed + remaining empty candidates can no longer reach the quota.
-    const unitState = (pups: number, empties: number) =>
-      pups > quota || pups + empties < quota;
+    const unitState = (pups: number, empties: number, need: number) =>
+      pups > need || pups + empties < need;
 
     for (let r = 0; r < size; r++) {
       let pups = 0;
@@ -682,7 +697,7 @@ export class PuzzleSolver {
         if (cells[r][c].value === 'puppy') pups++;
         else if (cells[r][c].value === 'empty') empties++;
       }
-      if (unitState(pups, empties)) return true;
+      if (unitState(pups, empties, quota)) return true;
     }
     for (let c = 0; c < size; c++) {
       let pups = 0;
@@ -691,7 +706,7 @@ export class PuzzleSolver {
         if (cells[r][c].value === 'puppy') pups++;
         else if (cells[r][c].value === 'empty') empties++;
       }
-      if (unitState(pups, empties)) return true;
+      if (unitState(pups, empties, quota)) return true;
     }
     for (const region of regionCells) {
       let pups = 0;
@@ -700,7 +715,7 @@ export class PuzzleSolver {
         if (cells[cell.row][cell.col].value === 'puppy') pups++;
         else if (cells[cell.row][cell.col].value === 'empty') empties++;
       }
-      if (unitState(pups, empties)) return true;
+      if (unitState(pups, empties, regNeed.get(region.id) ?? quota)) return true;
     }
 
     return false;

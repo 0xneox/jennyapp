@@ -1,4 +1,5 @@
 import { getLevelConfig, getLevelMechanics } from '../data/proceduralPuzzles';
+import { MAX_LEVEL } from '../game/types';
 
 const STATS_KEY = '@jenny_game_stats';
 
@@ -185,7 +186,7 @@ const parseGameStats = (raw: string | null): GameStats | null => {
           levelStats[level].bestScore === undefined &&
           v.completions > 0 &&
           level >= 1 &&
-          level <= 1000
+          level <= MAX_LEVEL
         ) {
           levelStats[level].bestScore = calculateLevelScore(
             levelStats[level].stars ?? 3,

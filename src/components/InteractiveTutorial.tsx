@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1.5,
     borderColor: CANDY_SURFACE.border,
-    gap: 12,
+    // Y3: gap:12 replaced with speechContent marginLeft:12 below
     alignItems: 'flex-start',
     marginBottom: 16,
   },
@@ -405,6 +405,7 @@ const styles = StyleSheet.create({
   },
   speechContent: {
     flex: 1,
+    marginLeft: 12, // Y3: replaces dialogueCard gap:12
   },
   speakerName: {
     fontSize: 12,
@@ -541,15 +542,17 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: CANDY_SURFACE.border,
     marginBottom: 14,
-    gap: 8,
+    // Y3: column gap:8 replaced with summaryItem marginBottom:8 below
   },
   summaryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    marginBottom: 8, // Y3: replaces summaryCard column gap:8
+    // Y3: inner row gap:10 replaced with summaryIcon marginRight:10 below
   },
   summaryIcon: {
     fontSize: 18,
+    marginRight: 10, // Y3: replaces summaryItem row gap:10
   },
   summaryText: {
     fontSize: 13,

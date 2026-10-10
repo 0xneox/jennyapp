@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Animated,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -13,25 +15,39 @@ import { useGameStore } from '../store/gameStore';
 import { CHAPTERS, getChapterIndexForLevel } from '../data/chapterData';
 import { getTotalStats, getTotalScore, GameStats } from '../utils/statistics';
 import { soundManager } from '../utils/soundManager';
+import {
+  DailyChallengeState,
+  getDailyChallengeState,
+} from '../utils/dailyChallenge';
+import { showRewardedAd, adsAvailable } from '../ads/adManager';
 import { CandyBackground } from '../components/candy/CandyBackground';
 import { CandyButton } from '../components/candy/CandyButton';
 import { CandyPanel } from '../components/candy/CandyPanel';
 import { AdBanner } from '../components/AdBanner';
+import { PostageStamp } from '../components/PostageStamp';
+import { ChapterStampModal } from '../components/ChapterStampModal';
+import { Chapter } from '../data/chapterData';
 import { CANDY_GOLD, CANDY_SURFACE, CANDY_TEXT } from '../utils/theme';
 
 export const WorldMapScreen: React.FC = () => {
-  const { currentLevel, unlockedLevels, startLevel, setActiveScreen } = useGameStore();
+  const { currentLevel, unlockedLevels, startLevel, setActiveScreen, redeemStreakShopItem, refreshStreakHintsCache } = useGameStore();
   const [stats, setStats] = useState<GameStats | null>(null);
+  const [dailyState, setDailyState] = useState<DailyChallengeState | null>(null);
+  const [streakCountdown, setStreakCountdown] = useState<string>('');
+  const [graceRepairBusy, setGraceRepairBusy] = useState(false);
+  const { redeemStreakShopItem: _skip, refreshStreakHintsCache: _skip2 } = useGameStore();
 
   // Initialize selected chapter to the one containing currentLevel
   const initialChapterIndex = getChapterIndexForLevel(currentLevel);
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(initialChapterIndex);
+  const [inspectedStamp, setInspectedStamp] = useState<Chapter | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let cancelled = false;
     getTotalStats().then(s => { if (!cancelled) setStats(s); }).catch(() => {});
+    getDailyChallengeState().then(d => { if (!cancelled) setDailyState(d); }).catch(() => {});
 
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -39,9 +55,31 @@ export const WorldMapScreen: React.FC = () => {
       useNativeDriver: true,
     }).start();
 
+    // Y2: live countdown to streak-break deadline — re-reads state every 30s
+    // so the banner updates even if the player camps on World Map all day.
+    const tickCountdown = () => {
+      if (cancelled) return;
+      getDailyChallengeState()
+        .then(d => {
+          if (cancelled) return;
+          setDailyState(d);
+          if (d.nextPlayDueDate) {
+            const ms = new Date(d.nextPlayDueDate).getTime() - Date.now();
+            const total = Math.max(0, Math.floor(ms / 60000));
+            const h = Math.floor(total / 60);
+            const m = total % 60;
+            setStreakCountdown(`${h}h ${String(m).padStart(2, '0')}m`);
+          }
+        })
+        .catch(() => {});
+    };
+    tickCountdown();
+    const countdownTimer = setInterval(tickCountdown, 30 * 1000);
+
     return () => {
       cancelled = true;
       fadeAnim.stopAnimation();
+      clearInterval(countdownTimer);
     };
   }, []);
 
@@ -111,6 +149,81 @@ export const WorldMapScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={[styles.mainWrapper, { opacity: fadeAnim }]}>
+          {/* Y2: Streak countdown banner — always visible when there is a streak,
+               turns RED + offers one-tap repair during the grace window. */}
+          {dailyState && (dailyState.currentStreak >= 1 || dailyState.streakInGraceWindow) && (
+            <CandyPanel
+              contentStyle={[
+                styles.streakBanner,
+                dailyState.streakInGraceWindow ? styles.streakBannerDanger : styles.streakBannerSafe,
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.streakBannerInner}
+                activeOpacity={0.85}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  try { soundManager.play('button'); } catch {}
+                  setActiveScreen('home');
+                }}
+              >
+                <Text style={styles.streakBannerIcon}>
+                  {dailyState.streakInGraceWindow ? '⚠️' : '🔥'}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[
+                    styles.streakBannerTitle,
+                    dailyState.streakInGraceWindow ? styles.streakBannerTitleDanger : styles.streakBannerTitleSafe,
+                  ]}>
+                    {dailyState.streakInGraceWindow
+                      ? 'STREAK AT RISK'
+                      : `${dailyState.currentStreak} Day Streak`}
+                  </Text>
+                  <Text style={styles.streakBannerSub}>
+                    {dailyState.streakInGraceWindow
+                      ? `${streakCountdown} left — your streak is in the grace window!`
+                      : `Streak safe for ${streakCountdown}`}
+                  </Text>
+                </View>
+                {dailyState.streakInGraceWindow && (
+                  <View style={{ marginTop: 8, width: '100%' }}>
+                    <CandyButton
+                      size="sm"
+                      skin="red"
+                      label={graceRepairBusy ? undefined : '📺 Watch & Keep My Streak'}
+                      disabled={graceRepairBusy}
+                      onPress={async () => {
+                        if (graceRepairBusy) return;
+                        setGraceRepairBusy(true);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                        try { soundManager.play('button'); } catch {}
+                        let earned = false;
+                        if (adsAvailable()) {
+                          earned = await showRewardedAd().catch(() => false);
+                        }
+                        if (!earned && Platform.OS === 'web') {
+                          earned = await new Promise<boolean>(r => setTimeout(() => r(true), 1600));
+                        }
+                        if (earned) {
+                          const ok = await redeemStreakShopItem({ kind: 'repair', spentTierDays: 0 }).catch(() => false);
+                          if (ok) {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                            try { soundManager.play('complete'); } catch {}
+                            await refreshStreakHintsCache();
+                            getDailyChallengeState().then(d => setDailyState(d)).catch(() => {});
+                          }
+                        }
+                        setGraceRepairBusy(false);
+                      }}
+                    >
+                      {graceRepairBusy ? <ActivityIndicator color="#fff" size="small" /> : null}
+                    </CandyButton>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </CandyPanel>
+          )}
+
           {/* Horizontal Chapter Selector Cards */}
           <Text style={styles.sectionHeader}>PASSPORT DESTINATIONS 🧭</Text>
           <ScrollView
@@ -176,11 +289,18 @@ export const WorldMapScreen: React.FC = () => {
 
                   {/* Stamp Seal if 100% completed */}
                   {progressPct === 100 ? (
-                    <View style={[styles.stampSealBadge, { borderColor: chapter.accentColor }]}>
-                      <Text style={[styles.stampSealText, { color: chapter.accentColor }]}>
-                        STAMPED 🐾
-                      </Text>
-                    </View>
+                    <TouchableOpacity
+                      style={styles.stampSealInteractive}
+                      activeOpacity={0.75}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        soundManager.play('button');
+                        setInspectedStamp(chapter);
+                      }}
+                    >
+                      <PostageStamp chapter={chapter} size="sm" isStamped={true} />
+                    </TouchableOpacity>
                   ) : (
                     <>
                       {/* Mini Progress Bar */}
@@ -214,7 +334,34 @@ export const WorldMapScreen: React.FC = () => {
             ]}
           >
             <View style={styles.chapterHeroHeader}>
-              <Text style={styles.chapterHeroEmoji}>{activeChapter.icon}</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  let allDone = true;
+                  for (let l = activeChapter.start; l <= activeChapter.end; l++) {
+                    if (!isLevelCompleted(l)) {
+                      allDone = false;
+                      break;
+                    }
+                  }
+                  if (allDone) {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    soundManager.play('button');
+                    setInspectedStamp(activeChapter);
+                  }
+                }}
+              >
+                <PostageStamp
+                  chapter={activeChapter}
+                  size="sm"
+                  isStamped={CHAPTERS.filter(ch => ch.id === activeChapter.id).every(ch => {
+                    for (let l = ch.start; l <= ch.end; l++) {
+                      if (!isLevelCompleted(l)) return false;
+                    }
+                    return true;
+                  })}
+                />
+              </TouchableOpacity>
               <View style={styles.chapterHeroTextCol}>
                 <Text style={styles.chapterHeroTitle}>
                   Stamp #{activeChapter.id}: {activeChapter.title}
@@ -295,6 +442,13 @@ export const WorldMapScreen: React.FC = () => {
 
       {/* AdMob banner — collapses to nothing until ads are ready */}
       <AdBanner />
+
+      {/* Chapter Stamp Inspection Modal */}
+      <ChapterStampModal
+        visible={!!inspectedStamp}
+        chapter={inspectedStamp}
+        onClose={() => setInspectedStamp(null)}
+      />
     </SafeAreaView>
     </CandyBackground>
   );
@@ -368,7 +522,9 @@ const styles = StyleSheet.create({
   /* Chapter Carousel */
   chapterCarousel: {
     paddingBottom: 8,
-    gap: 12,
+    // Y3: replaced gap: 12 — each chapter card after the first has an inline
+    // left margin of 12 applied via parent horizontal ScrollView padding
+    // bleed. Simplest compat: marginRight on every individual chapterCard.
   },
   chapterCard: {
     width: 140,
@@ -382,6 +538,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 4,
+    // Y3: replaces chapterCarousel gap: 12 for legacy Android compat.
+    marginRight: 12,
   },
   chapterCardSelected: {
     borderWidth: 2.5,
@@ -440,6 +598,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: CANDY_TEXT.onDarkMuted,
     textAlign: 'right',
+  },
+  stampSealInteractive: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+    marginBottom: 2,
   },
   stampSealBadge: {
     borderWidth: 2,
@@ -523,7 +687,6 @@ const styles = StyleSheet.create({
   levelGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
     justifyContent: 'flex-start',
   },
   levelNode: {
@@ -541,6 +704,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 4,
     elevation: 3,
+    // Y3: replaces levelGrid gap: 12 for legacy Android compat.
+    marginRight: 12,
+    marginBottom: 12,
   },
   levelNodeCompleted: {
     backgroundColor: '#26B85B',
@@ -587,5 +753,52 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+
+  /* Y2: Streak countdown banner */
+  streakBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    borderRadius: 18,
+    borderWidth: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  streakBannerSafe: {
+    backgroundColor: 'rgba(37, 184, 78, 0.14)',
+    borderColor: '#25B84E',
+  },
+  streakBannerDanger: {
+    backgroundColor: 'rgba(231, 76, 60, 0.18)',
+    borderColor: '#E74C3C',
+  },
+  streakBannerInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+  },
+  streakBannerIcon: {
+    fontSize: 26,
+    marginRight: 12,
+  },
+  streakBannerTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  streakBannerTitleSafe: {
+    color: '#8CFFA8',
+  },
+  streakBannerTitleDanger: {
+    color: '#FFB3A8',
+  },
+  streakBannerSub: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: CANDY_TEXT.onDarkSoft,
+    marginTop: 2,
+    lineHeight: 16,
   },
 });
