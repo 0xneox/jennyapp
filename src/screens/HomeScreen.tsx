@@ -32,6 +32,10 @@ import { CandyBackground } from '../components/candy/CandyBackground';
 import { CandyButton } from '../components/candy/CandyButton';
 import { CandyPanel } from '../components/candy/CandyPanel';
 import { AdBanner } from '../components/AdBanner';
+import { PlayerAvatar } from '../components/PlayerAvatar';
+import { ProfileModal } from '../components/ProfileModal';
+import { formatPlayerName } from '../data/profileOptions';
+import { LeaderboardProfile, getOrCreateProfile } from '../utils/leaderboard';
 import {
   APP_NAME,
   APP_TAGLINE,
@@ -60,6 +64,8 @@ export const HomeScreen: React.FC = () => {
   const [countdown, setCountdown] = useState<string>('');
   // Y2 #3: Proactive streak-broken repair modal on app open.
   const [showStreakBrokenModal, setShowStreakBrokenModal] = useState(false);
+  const [profile, setProfile] = useState<LeaderboardProfile | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
   const [streakRepairBusy, setStreakRepairBusy] = useState(false);
 
   // ---- Responsive sizing based on viewport (defense-in-depth across devices)
@@ -170,6 +176,9 @@ export const HomeScreen: React.FC = () => {
 
     // Load persisted stats
     getTotalStats().then(s => { if (!cancelled) setStats(s); }).catch(() => {});
+
+    // Local-only profile (nothing uploads until the player joins the leaderboard)
+    getOrCreateProfile().then(p => { if (!cancelled) setProfile(p); }).catch(() => {});
 
     // Load daily challenge state
     getDailyChallengeState().then(d => {
@@ -351,9 +360,28 @@ export const HomeScreen: React.FC = () => {
         >
           {/* Top Bar with Settings */}
           <View style={[styles.topBar, { marginBottom: vGap(16), marginTop: vGap(8) }]}>
-            <View style={styles.appPill}>
-              <Text style={[styles.appPillText, { fontSize: fs(13) }]}>🐾 {APP_NAME}</Text>
-            </View>
+            {profile ? (
+              <TouchableOpacity
+                style={[styles.appPill, styles.profilePill]}
+                activeOpacity={0.8}
+                accessibilityLabel="Edit your profile"
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  soundManager.play('button');
+                  setShowProfile(true);
+                }}
+              >
+                <PlayerAvatar avatar={profile.avatar} size={fs(26)} />
+                <Text style={[styles.appPillText, { fontSize: fs(13), marginLeft: 8, flexShrink: 1 }]} numberOfLines={1}>
+                  {formatPlayerName(profile)}
+                </Text>
+                <Text style={{ fontSize: fs(12), marginLeft: 6 }}>✏️</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.appPill}>
+                <Text style={[styles.appPillText, { fontSize: fs(13) }]}>🐾 {APP_NAME}</Text>
+              </View>
+            )}
             <CandyButton
               skin="grape"
               size="sm"
@@ -674,6 +702,12 @@ export const HomeScreen: React.FC = () => {
         }}
       />
 
+      <ProfileModal
+        visible={showProfile}
+        onClose={() => setShowProfile(false)}
+        onSaved={setProfile}
+      />
+
       {/* AdMob banner — collapses to nothing until ads are ready */}
       <AdBanner />
     </SafeAreaView>
@@ -716,6 +750,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
+  },
+  profilePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 4,
+    paddingVertical: 3,
+    maxWidth: '78%',
   },
   appPillText: {
     fontSize: 13,
