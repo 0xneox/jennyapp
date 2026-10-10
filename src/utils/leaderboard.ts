@@ -13,7 +13,8 @@ import { MAX_LEVEL } from '../game/types';
  * Global leaderboard client (Supabase). Backend: supabase/migrations/0001_leaderboard.sql.
  *
  * Configure at build time with EXPO_PUBLIC_SUPABASE_URL and
- * EXPO_PUBLIC_SUPABASE_ANON_KEY. Without them every call is a no-op and the
+ * EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY (eas.json / .env.local). Never use the
+ * secret key here — it would ship inside the APK. Without them every call is a no-op and the
  * UI shows "coming soon", so builds without a backend stay fully offline.
  *
  * Nothing is uploaded until the player taps "Join" (profile.joined).
@@ -21,7 +22,7 @@ import { MAX_LEVEL } from '../game/types';
 
 // Must be literal `process.env.EXPO_PUBLIC_*` reads so Expo inlines them.
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/+$/, '');
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
 const REQUEST_TIMEOUT_MS = 10000;
 
 export const isLeaderboardConfigured = (): boolean => !!SUPABASE_URL && !!SUPABASE_ANON_KEY;

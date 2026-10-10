@@ -109,7 +109,7 @@ describe('Leaderboard network client', () => {
 
     beforeEach(() => {
       process.env.EXPO_PUBLIC_SUPABASE_URL = `${URL_}/`;
-      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'anon-key';
+      process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'anon-key';
       fetchMock = jest.fn(async (url: string) => {
         const body = url.endsWith('lb_sync')
           ? [{ total_points: 6100, rank: 1 }]
@@ -128,7 +128,7 @@ describe('Leaderboard network client', () => {
 
     afterEach(() => {
       delete process.env.EXPO_PUBLIC_SUPABASE_URL;
-      delete process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
       delete (global as any).fetch;
     });
 

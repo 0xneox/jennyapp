@@ -34,7 +34,8 @@ Expo SDK 57 / React Native 0.86 / TypeScript. Star Battle-style puzzle game, 100
 ## Leaderboard (v1.2, branch `feature/leaderboard`)
 
 - Backend: Supabase, schema in `supabase/migrations/0001_leaderboard.sql` (run in the SQL editor; idempotent). App calls 3 RPCs via plain `fetch` in `src/utils/leaderboard.ts` (no SDK).
-- Config: `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` at build time. Unset = feature shows "coming soon", zero network.
+- Config: `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — in `eas.json` build env (builds) and git-ignored `.env.local` (dev). Never the secret key. Unset = "coming soon", zero network.
+- Project is in `ap-northeast-2`; direct DB host is IPv6-only, so run SQL via the SQL Editor or the session pooler `aws-0-ap-northeast-2.pooler.supabase.com:5432`, user `postgres.wktfcezgwclbzpvigtgz`.
 - Nothing uploads until the player taps Join. Names are word *indexes* (`src/data/profileOptions.ts`), never free text — lists are **append-only**.
 - Point formula lives in BOTH `leaderboard.ts` and the SQL (`lb_sync`, `lb_streak_bonus`, `lb_max_level_score`). Change both; `tests/leaderboard.test.ts` asserts the cap ≥ every level's max score.
 - Changing what's uploaded requires updating `src/data/legalText.ts`, `public/privacy.html`, and the Play Data Safety form.
