@@ -10,15 +10,15 @@ const mech = (puppiesPerUnit: number, catCount = 0, linkedCount = 0, hungryCount
 describe('Level-aware How to Play', () => {
   it('classic levels teach 1 puppy and nothing extra', () => {
     const rules = getLevelRules(mech(1));
-    expect(rules[0].title).toBe('1 puppy in every row and column');
+    expect(rules[0].title).toBe('1 puppy in every row & column');
     expect(rules.map(r => r.emoji)).toEqual(['🐶', '🚫', '💡']);
   });
 
   it('twin linked beds say they share 2, classic linked beds say 1', () => {
     const twin = getLevelRules(mech(2, 0, 2)).find(r => r.title === 'Linked beds')!;
-    expect(twin.body).toContain('need 2 puppies');
+    expect(twin.body).toContain('2 puppies in total');
     const classic = getLevelRules(mech(1, 0, 1)).find(r => r.title === 'Linked beds')!;
-    expect(classic.body).toContain('single puppy');
+    expect(classic.body).toContain('1 puppy in either part');
   });
 
   it('explains only the number badges present on the board', () => {
@@ -28,7 +28,7 @@ describe('Level-aware How to Play', () => {
     expect(pondFeast).not.toContain('come in pairs');
 
     const lighter = getLevelRules(mech(2, 1, 1, 4), [3, 1, 3, 1]).find(r => r.title === 'Number beds')!.body;
-    expect(lighter).toContain('1 and 3');
+    expect(lighter).toContain('1 & 3');
     expect(lighter).not.toContain('pond');
   });
 
@@ -47,6 +47,14 @@ describe('Level-aware How to Play', () => {
       if (m.linkedCount) expect(titles).toContain('Linked beds');
       if (needs.length) expect(titles).toContain('Number beds');
     }
+  });
+
+  it('keeps every rule short enough to read at a glance', () => {
+    const rules = getLevelRules(mech(2, 3, 3, 4), [0, 4, 3, 1]);
+    rules.forEach(r => {
+      expect(r.title.length).toBeLessThanOrEqual(32);
+      r.body.split('\n').forEach(line => expect(line.length).toBeLessThanOrEqual(60));
+    });
   });
 
   it('header chips stay short so they wrap cleanly on small phones', () => {

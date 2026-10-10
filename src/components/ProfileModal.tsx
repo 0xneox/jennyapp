@@ -88,7 +88,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose, on
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingBottom: 4 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 4 }}>
           <View style={styles.preview}>
             <PlayerAvatar avatar={identity.avatar} size={64} selected />
             <View style={{ flex: 1, marginLeft: 12 }}>

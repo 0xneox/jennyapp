@@ -46,7 +46,8 @@ export const LevelRulesModal: React.FC<LevelRulesModalProps> = ({
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingBottom: 4 }} showsVerticalScrollIndicator={false}>
+        {/* flexShrink lets the list shrink to the card's maxHeight and scroll */}
+        <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 4 }}>
           {rules.map(rule => (
             <View key={rule.title} style={styles.rule}>
               <Text style={styles.ruleEmoji}>{rule.emoji}</Text>
@@ -90,19 +91,21 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  scroll: { flexGrow: 0, flexShrink: 1 },
   kicker: { fontSize: 12, fontWeight: '900', color: '#7C3FD6', textTransform: 'uppercase', letterSpacing: 0.6 },
   title: { fontSize: 20, fontWeight: '900', color: '#3A2465' },
   close: { fontSize: 18, color: '#6F5E8E', fontWeight: '800', paddingHorizontal: 6 },
   rule: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     backgroundColor: '#F3ECFF',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 6,
   },
-  ruleEmoji: { fontSize: 24, marginRight: 10, lineHeight: 30 },
-  ruleTitle: { fontSize: 15, fontWeight: '900', color: '#3A2465' },
-  ruleBody: { fontSize: 13, color: '#5B4A7E', marginTop: 3, lineHeight: 19 },
+  ruleEmoji: { fontSize: 20, marginRight: 10 },
+  ruleTitle: { fontSize: 14, fontWeight: '900', color: '#3A2465' },
+  ruleBody: { fontSize: 12, color: '#5B4A7E', marginTop: 2, lineHeight: 17 },
   basics: { fontSize: 13, fontWeight: '800', color: '#7C3FD6' },
 });
