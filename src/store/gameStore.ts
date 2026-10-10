@@ -3,7 +3,7 @@ import { GameEngine } from '../game/engine';
 import { getRandomizedLevel1 } from '../data/puzzles';
 import { getPuzzle, getDailyPuzzle } from '../data/proceduralPuzzles';
 import { MAX_LEVEL } from '../game/types';
-import { Deduction, PuzzleData } from '../game/types';
+import { Deduction, PuzzleData, Region } from '../game/types';
 import { PuzzleSolver } from '../game/solver';
 
 export type GameMode = 'normal' | 'zen';
@@ -16,15 +16,21 @@ export interface ActiveHint {
   explanation: string;
 }
 
-const explainHint = (deduction: Deduction, quota: number): string => {
+export const explainHint = (deduction: Deduction, quota: number, regions: Region[] = []): string => {
   const { row, col } = deduction.affectedCell;
   switch (deduction.technique) {
     case 'row_elimination':
       return `Row ${row + 1} is full — X out the rest with Paw Mark!`;
     case 'column_elimination':
       return `Column ${col + 1} is full — X out the rest with Paw Mark!`;
-    case 'region_elimination':
-      return `This patch has all ${quota === 1 ? 'its puppy' : `${quota} puppies`} — X out its other spots!`;
+    case 'region_elimination': {
+      // Hungry beds carry their own count; describe the badge, not the board quota.
+      const probe = deduction.eliminatedCells[0] ?? deduction.affectedCell;
+      const region = regions.find(r => r.cells.some(c => c.row === probe.row && c.col === probe.col));
+      const need = region?.requiredPups ?? quota;
+      if (need === 0) return 'This is a pond (0) — no puppies allowed here. X out its spots!';
+      return `This patch has all ${need === 1 ? 'its puppy' : `${need} puppies`} — X out its other spots!`;
+    }
     case 'neighbour_elimination':
       return 'Puppies need space! X out spots touching a puppy or cat, even diagonally.';
     case 'single_cell_colour':
@@ -641,7 +647,7 @@ export const useGameStore = create<GameStore>((set, get) => {
             cell,
             value: placement ? 'puppy' : 'marked',
             tier: 1,
-            explanation: explainHint(deduction, mechanics.puppiesPerUnit),
+            explanation: explainHint(deduction, mechanics.puppiesPerUnit, board.regions),
           },
           hintMessage: null,
           hintsUsed: hintsUsed + 1,
@@ -654,7 +660,7 @@ export const useGameStore = create<GameStore>((set, get) => {
             cell,
             value: placement ? 'puppy' : 'marked',
             tier: 1,
-            explanation: explainHint(deduction, mechanics.puppiesPerUnit),
+            explanation: explainHint(deduction, mechanics.puppiesPerUnit, board.regions),
           },
           hintMessage: null,
           hintsUsed: hintsUsed + 1,

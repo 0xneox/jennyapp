@@ -33,19 +33,19 @@ export const getDifficultyColor = (difficulty: DifficultyLevel): string => {
 export const getDifficultyLabel = (difficulty: DifficultyLevel): string => {
   switch (difficulty) {
     case 'beginner':
-      return '★';
+      return 'Beginner';
     case 'easy':
-      return '★★';
+      return 'Easy';
     case 'medium':
-      return '★★★';
+      return 'Medium';
     case 'hard':
-      return '★★★★';
+      return 'Hard';
     case 'expert':
-      return '★★★★★';
+      return 'Expert';
     case 'master':
-      return '★★★★★★';
+      return 'Master';
     case 'legend':
-      return '★★★★★★★';
+      return 'Legend';
     default:
       return '?';
   }

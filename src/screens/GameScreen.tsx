@@ -57,6 +57,8 @@ import { MAX_LEVEL } from '../game/types';
 import { getChapterStory, CHAPTERS_WITH_STORIES, ChapterStory } from '../data/chapterStories';
 import { JennyAvatar, JennyMood } from '../components/assets/JennyAvatar';
 import { InteractiveTutorial } from '../components/InteractiveTutorial';
+import { LevelRulesModal } from '../components/LevelRulesModal';
+import { getRuleChips } from '../data/levelRules';
 import { JENNY_CHEERS } from '../data/storyLore';
 import {
   recordDailyCompletion,
@@ -133,6 +135,7 @@ export const GameScreen: React.FC = () => {
 
   const [cellSize, setCellSize] = useState<number>(() => calcCellSize(board.gridSize));
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [lastTap, setLastTap] = useState<{ row: number; col: number; time: number } | null>(null);
   const [lastPlacedPuppy, setLastPlacedPuppy] = useState<{ row: number; col: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -197,6 +200,10 @@ export const GameScreen: React.FC = () => {
   // dialog when moves have been made (nothing to lose on a blank level).
   useEffect(() => {
     const handleBackPress = (): boolean => {
+      if (showRules) {
+        setShowRules(false);
+        return true;
+      }
       // If any modal is already open — let it handle its own close first.
       if (
         showRestartConfirm ||
@@ -256,6 +263,7 @@ export const GameScreen: React.FC = () => {
     activeMechanicIntro,
     activeChapterStory,
     showTutorial,
+    showRules,
     setActiveScreen,
   ]);
 
@@ -614,6 +622,13 @@ export const GameScreen: React.FC = () => {
       }
     };
   }, [isComplete, completionScaleAnim, currentLevel, moves, hearts, isDailyChallenge, hintsUsed]);
+
+  // Number-bed values on this board, so How to Play explains exactly these badges.
+  const hungryNeeds = useMemo(
+    () => board.regions.flatMap(r => (r.requiredPups === undefined ? [] : [r.requiredPups])),
+    [board.regions]
+  );
+  const ruleChips = useMemo(() => getRuleChips(mechanics), [mechanics]);
 
   // --- Live scoring: +PUPPY_SCORE pops per placed puppy, chip previews the
   // net level score (run gross x current star fraction) so mistakes visibly
@@ -1055,6 +1070,19 @@ export const GameScreen: React.FC = () => {
         </View>
       ) : (
         <>
+      {/* Level-aware How to Play (❓ button, rule chips, Settings) */}
+      <LevelRulesModal
+        visible={showRules}
+        onClose={() => setShowRules(false)}
+        title={isDailyChallenge ? 'Daily Walk' : `Level ${currentLevel}`}
+        mechanics={mechanics}
+        hungryNeeds={hungryNeeds}
+        onOpenBasics={() => {
+          setShowRules(false);
+          setShowTutorial(true);
+        }}
+      />
+
       {/* Interactive 3-Rule Spotlight Tutorial */}
       <InteractiveTutorial
         visible={showTutorial}
@@ -1378,7 +1406,7 @@ export const GameScreen: React.FC = () => {
         }}
         onOpenTutorial={() => {
           setShowSettingsModal(false);
-          setShowTutorial(true);
+          setShowRules(true);
         }}
       />
 
@@ -1406,7 +1434,7 @@ export const GameScreen: React.FC = () => {
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 soundManager.play('button');
-                setShowTutorial(true);
+                setShowRules(true);
               }}
               style={styles.navSquareButton}
             >
@@ -1451,14 +1479,26 @@ export const GameScreen: React.FC = () => {
               {isDailyChallenge ? '🔥 Daily' : getDifficultyLabel(getLevelDifficulty(currentLevel))}
             </Text>
           </View>
-          {(mechanics.puppiesPerUnit > 1 || mechanics.catCount > 0 || mechanics.linkedCount > 0 || mechanics.hungryCount > 0) && (
-            <Text style={styles.twistText}>
-              {mechanics.puppiesPerUnit > 1 &&
-                `👯 ${mechanics.puppiesPerUnit} pups per row, column & patch!  `}
-              {mechanics.catCount > 0 && '😾 Cats need space!  '}
-              {mechanics.linkedCount > 0 && '🔗 Linked beds share 1 pup!  '}
-              {mechanics.hungryCount > 0 && '🍽️ Numbered beds have their own count!'}
-            </Text>
+          {ruleChips.length > 0 && (
+            <TouchableOpacity
+              style={styles.ruleChipRow}
+              activeOpacity={0.75}
+              accessibilityLabel="Show the rules for this level"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                soundManager.play('button');
+                setShowRules(true);
+              }}
+            >
+              {ruleChips.map(chip => (
+                <View key={chip.label} style={styles.ruleChip}>
+                  <Text style={styles.ruleChipText} numberOfLines={1}>{chip.emoji} {chip.label}</Text>
+                </View>
+              ))}
+              <View style={[styles.ruleChip, styles.ruleChipInfo]}>
+                <Text style={styles.ruleChipText}>ⓘ Rules</Text>
+              </View>
+            </TouchableOpacity>
           )}
         </View>
         <Animated.View
@@ -1506,12 +1546,6 @@ export const GameScreen: React.FC = () => {
           </CandyPanel>
         )}
 
-        {mechanics.puppiesPerUnit > 1 && (
-          <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
-            <Text style={styles.subStatIcon}>🐾</Text>
-            <Text style={styles.subStatText}>×{mechanics.puppiesPerUnit}</Text>
-          </CandyPanel>
-        )}
       </View>
 
       {/* The Board flanked by Undo + Restart on the left, Hint on the right —
@@ -1736,6 +1770,8 @@ const styles = StyleSheet.create({
   levelHeaderPanel: {
     alignSelf: 'center',
     marginBottom: 10,
+    // Never wider than the screen: long rule rows wrap instead of overflowing.
+    maxWidth: '94%',
   },
   heart: {
     fontSize: 18,
@@ -2231,6 +2267,8 @@ const styles = StyleSheet.create({
   },
   centerLevelInfo: {
     alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
     marginLeft: 10, // Y3: replaces centerLevelGroup gap:10
     // Y3: inner column gap:3 → children navTitle + difficultyBadgeHeader are spaced with marginTop:3 on badge below
   },
@@ -2263,12 +2301,30 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
     zIndex: 10,
   },
-  twistText: {
+  ruleChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    rowGap: 4,
+    columnGap: 4,
+    marginTop: 5,
+  },
+  ruleChip: {
+    backgroundColor: 'rgba(20, 10, 44, 0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 237, 166, 0.45)',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  ruleChipInfo: {
+    backgroundColor: 'rgba(255, 201, 60, 0.25)',
+    borderColor: CANDY_GOLD.base,
+  },
+  ruleChipText: {
     fontSize: 11,
     fontWeight: '800',
     color: CANDY_GOLD.light,
-    textAlign: 'center',
-    marginTop: 2,
   },
   navTitle: {
     fontSize: 22,

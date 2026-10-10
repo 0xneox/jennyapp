@@ -24,6 +24,9 @@ export interface ChapterStory {
  * Chapter 31 (Level 601): Twin Puppies debut
  * Chapter 41 (Level 801): Twin Puppies + Cats
  * Chapter 46 (Level 901): Grand Championship (twins + cats + linked)
+ * Chapter 51 (Level 1001): Encore Expedition begins (triple linked beds)
+ * Chapter 52 (Level 1021): Hungry Beds debut (pond 0 + feast 4)
+ * Chapter 56 (Level 1101): Lighter beds (3 / 1 pairs)
  */
 export const CHAPTER_STORIES: ChapterStory[] = [
   {
@@ -183,6 +186,87 @@ export const CHAPTER_STORIES: ChapterStory[] = [
         chapter: 'Chapter 46 • Olympus Park',
         headline: 'You\'re a Garden Guardian!',
         dialogue: 'If you can solve these gardens, you can solve anything! Jenny believes in you — every puppy in the meadow is counting on you!',
+        highlightColor: '#27AE60',
+        emoji: '🏆',
+      },
+    ],
+  },
+  {
+    chapterId: 51,
+    title: 'The Encore Expedition!',
+    pages: [
+      {
+        chapter: 'Chapter 51 • Rainbow Falls',
+        headline: 'Beyond the sanctuary! 🌈',
+        dialogue: 'You saved all 1,000 meadows! But past the rainbow there are 200 secret gardens — every one is 10×10 with 2 pups per row, column and patch.',
+        highlightColor: '#00897B',
+        emoji: '🌈',
+      },
+      {
+        chapter: 'Chapter 51 • Rainbow Falls',
+        headline: 'Three linked pairs! 🔗',
+        dialogue: 'Rainbow mist links THREE pairs of beds here. Each 🔗 pair is one bed: together its two parts need 2 pups — 1 + 1, or 2 in one part.',
+        highlightColor: '#00897B',
+        emoji: '🔗',
+      },
+      {
+        chapter: 'Chapter 51 • Rainbow Falls',
+        headline: 'New surprises ahead!',
+        dialogue: 'Each chapter brings a new twist. Tap ❓ any time to see the exact rules for the level you\'re on!',
+        highlightColor: '#27AE60',
+        emoji: '❓',
+      },
+    ],
+  },
+  {
+    chapterId: 52,
+    title: 'Hungry Beds Arrive!',
+    pages: [
+      {
+        chapter: 'Chapter 52 • Hungry Hollow',
+        headline: 'Some beds have their own appetite! 🍽️',
+        dialogue: 'See the gold number badges? That patch needs exactly that many pups — not 2. The badge sits on the patch\'s top-left tile.',
+        highlightColor: '#F4511E',
+        emoji: '🍽️',
+      },
+      {
+        chapter: 'Chapter 52 • Hungry Hollow',
+        headline: 'The pond wants ZERO! ⛲',
+        dialogue: 'A 0 bed is a pond — puppies can\'t swim! Paw-mark every pond tile first. The feast bed (4) has to fit 4 pups that still can\'t touch.',
+        highlightColor: '#039BE5',
+        emoji: '⛲',
+      },
+      {
+        chapter: 'Chapter 52 • Hungry Hollow',
+        headline: 'The numbers always balance!',
+        dialogue: 'Rows and columns still need exactly 2 pups each — so the pups the pond refuses are the ones the feast bed eats. Count carefully!',
+        highlightColor: '#27AE60',
+        emoji: '⚖️',
+      },
+    ],
+  },
+  {
+    chapterId: 56,
+    title: 'Lighter Beds Join the Feast!',
+    pages: [
+      {
+        chapter: 'Chapter 56 • Banquet Bluffs',
+        headline: 'Badges of 1 and 3! 🎂',
+        dialogue: 'Now some beds are a little hungrier (3) and some a little lighter (1). They always come in pairs — one bed hands a pup to the other.',
+        highlightColor: '#5E35B1',
+        emoji: '🎂',
+      },
+      {
+        chapter: 'Chapter 56 • Banquet Bluffs',
+        headline: 'Four labels at once!',
+        dialogue: 'Some gardens have four number beds. Start with the most crowded: a 3 bed in a small patch has very few ways to fit.',
+        highlightColor: '#5E35B1',
+        emoji: '🧠',
+      },
+      {
+        chapter: 'Chapter 56 • Banquet Bluffs',
+        headline: 'Feast master!',
+        dialogue: 'Unlabelled patches still need 2. Read every badge, count every row, and the garden will tell you where each pup belongs!',
         highlightColor: '#27AE60',
         emoji: '🏆',
       },
