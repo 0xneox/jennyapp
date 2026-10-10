@@ -590,12 +590,32 @@ export const HomeScreen: React.FC = () => {
               </CandyButton>
             </View>
 
-            <CandyButton block skin="blue" onPress={handleOpenMap}>
+            <View style={{ marginBottom: vGap(14) }}>
+              <CandyButton block skin="blue" onPress={handleOpenMap}>
+                <View style={styles.rowButtonContent}>
+                  <Text style={[styles.storyButtonIcon, { fontSize: fs(22), marginRight: 12 }]}>🗺️</Text>
+                  <Text style={[styles.rowButtonText, { fontSize: fs(16) }]}>Chapters & Levels</Text>
+                  <View style={styles.rowButtonBadge}>
+                    <Text style={[styles.rowButtonBadgeText, { fontSize: fs(12) }]}>{unlockedLevels} / {MAX_LEVEL}</Text>
+                  </View>
+                </View>
+              </CandyButton>
+            </View>
+
+            <CandyButton
+              block
+              skin="grape"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                soundManager.play('button');
+                setActiveScreen('leaderboard');
+              }}
+            >
               <View style={styles.rowButtonContent}>
-                <Text style={[styles.storyButtonIcon, { fontSize: fs(22), marginRight: 12 }]}>🗺️</Text>
-                <Text style={[styles.rowButtonText, { fontSize: fs(16) }]}>Chapters & Levels</Text>
+                <Text style={[styles.storyButtonIcon, { fontSize: fs(22), marginRight: 12 }]}>🏆</Text>
+                <Text style={[styles.rowButtonText, { fontSize: fs(16) }]}>Leaderboard</Text>
                 <View style={styles.rowButtonBadge}>
-                  <Text style={[styles.rowButtonBadgeText, { fontSize: fs(12) }]}>{unlockedLevels} / {MAX_LEVEL}</Text>
+                  <Text style={[styles.rowButtonBadgeText, { fontSize: fs(12) }]}>Global</Text>
                 </View>
               </View>
             </CandyButton>

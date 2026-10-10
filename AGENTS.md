@@ -31,6 +31,14 @@ Expo SDK 57 / React Native 0.86 / TypeScript. Star Battle-style puzzle game, 100
 - Regenerate the synth-derived WAVs: `npx ts-node --compiler-options '{"module":"commonjs"}' scripts/generateExtraSounds.ts`.
 - BGM ships as `bgm_acoustic.m4a` (AAC). Rebuild from the WAV with `ffmpeg -i bgm_acoustic.wav -c:a aac -b:a 128k bgm_acoustic.m4a`.
 
+## Leaderboard (v1.2, branch `feature/leaderboard`)
+
+- Backend: Supabase, schema in `supabase/migrations/0001_leaderboard.sql` (run in the SQL editor; idempotent). App calls 3 RPCs via plain `fetch` in `src/utils/leaderboard.ts` (no SDK).
+- Config: `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` at build time. Unset = feature shows "coming soon", zero network.
+- Nothing uploads until the player taps Join. Names are word *indexes* (`src/data/profileOptions.ts`), never free text — lists are **append-only**.
+- Point formula lives in BOTH `leaderboard.ts` and the SQL (`lb_sync`, `lb_streak_bonus`, `lb_max_level_score`). Change both; `tests/leaderboard.test.ts` asserts the cap ≥ every level's max score.
+- Changing what's uploaded requires updating `src/data/legalText.ts`, `public/privacy.html`, and the Play Data Safety form.
+
 ## Gotchas
 
 - Wall-clock test thresholds are budgets (300ms cold / 20ms cached), not targets — don't tighten them to local numbers.

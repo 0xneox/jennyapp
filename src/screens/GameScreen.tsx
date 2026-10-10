@@ -50,6 +50,7 @@ import {
 } from '../utils/storage';
 import { soundManager } from '../utils/soundManager';
 import { recordLevelCompletion, getTotalStats, getTotalScore, PUPPY_SCORE } from '../utils/statistics';
+import { syncLeaderboard, DAILY_POINTS } from '../utils/leaderboard';
 import { getLevelDifficulty, getDifficultyColor, getDifficultyLabel } from '../utils/levelHelpers';
 import { getChapterForLevel, Chapter } from '../data/chapterData';
 import { MAX_LEVEL } from '../game/types';
@@ -141,6 +142,7 @@ export const GameScreen: React.FC = () => {
     streak: number;
     isNewRecord: boolean;
     reward: string | null;
+    alreadyCompleted?: boolean;
   } | null>(null);
 
   // Emotional Personality & Milestone States
@@ -531,6 +533,7 @@ export const GameScreen: React.FC = () => {
         .then(res => {
           if (cancelled) return;
           setDailyResult(res);
+          syncLeaderboard().catch(() => {});
           // If this daily completion bumped the permanent streak bonus,
           // refresh the store's cache so the next campaign level the user
           // starts sees the increased hint allowance immediately.
@@ -551,7 +554,10 @@ export const GameScreen: React.FC = () => {
           if (cancelled) return;
           setPawfectResult(result);
           setTotalScore(result.totalScore);
-          if (result.isNewBestScore) setLevelBestScore(result.score);
+          if (result.isNewBestScore) {
+            setLevelBestScore(result.score);
+            syncLeaderboard().catch(() => {});
+          }
         })
         .catch(() => {});
 
@@ -1285,6 +1291,11 @@ export const GameScreen: React.FC = () => {
                 <Text style={styles.dailyStreakCelebrationText}>
                   🔥 Streak: {dailyResult.streak} {dailyResult.streak === 1 ? 'Day' : 'Days'}
                 </Text>
+                {!dailyResult.alreadyCompleted && (
+                  <Text style={styles.dailyRewardCelebrationText}>
+                    🏆 +{DAILY_POINTS} leaderboard points
+                  </Text>
+                )}
                 {dailyResult.reward && (
                   <Text style={styles.dailyRewardCelebrationText}>
                     🎁 Unlocked: {dailyResult.reward}

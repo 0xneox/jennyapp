@@ -230,6 +230,10 @@ describe('Progression integrity', () => {
     store().startDailyChallenge();
     store().setActiveScreen('map');
     expect(store().currentLevel).toBe(50);
+    store().startDailyChallenge();
+    store().setActiveScreen('leaderboard');
+    expect(store().isDailyChallenge).toBe(false);
+    expect(store().currentLevel).toBe(50);
   });
 
   it('completing a campaign level unlocks exactly the next one', () => {

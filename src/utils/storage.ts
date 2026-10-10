@@ -676,3 +676,55 @@ export const saveStreakBonusHintsPerLevel = async (hints: number): Promise<void>
 
 export const STREAK_MAX_BONUS_HINTS = MAX_STREAK_BONUS_HINTS;
 
+// --- Leaderboard profile ----------------------------------------------------
+// `secret` is a random per-install token; only its hash is stored server-side.
+// Name/avatar are indexes into src/data/profileOptions.ts (validated there —
+// storage stays a leaf module).
+const PLAYER_PROFILE_KEY = '@jenny_player_profile_v1';
+
+export interface PlayerProfile {
+  secret: string;
+  nameAdj: number;
+  nameNoun: number;
+  nameNum: number;
+  avatar: number;
+  /** True once the player opted into the global leaderboard. */
+  joined: boolean;
+}
+
+export const loadPlayerProfile = async (): Promise<PlayerProfile | null> => {
+  try {
+    const raw = await getItem(PLAYER_PROFILE_KEY);
+    if (raw == null) return null;
+    const p = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      typeof p !== 'object' || p === null ||
+      typeof p.secret !== 'string' || p.secret.length < 32 ||
+      !isFiniteNumber(p.nameAdj) || !isFiniteNumber(p.nameNoun) ||
+      !isFiniteNumber(p.nameNum) || !isFiniteNumber(p.avatar)
+    ) {
+      console.warn('Discarding corrupt player profile payload');
+      return null;
+    }
+    return {
+      secret: p.secret,
+      nameAdj: p.nameAdj,
+      nameNoun: p.nameNoun,
+      nameNum: p.nameNum,
+      avatar: p.avatar,
+      joined: p.joined === true,
+    };
+  } catch (error) {
+    console.error('Error loading player profile:', error);
+    return null;
+  }
+};
+
+export const savePlayerProfile = async (profile: PlayerProfile): Promise<void> => {
+  try {
+    await setItem(PLAYER_PROFILE_KEY, JSON.stringify(profile));
+  } catch (error) {
+    console.error('Error saving player profile:', error);
+  }
+};
+

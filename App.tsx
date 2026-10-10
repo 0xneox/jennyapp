@@ -8,6 +8,8 @@ import { useGameStore, ScreenName } from './src/store/gameStore';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { WorldMapScreen } from './src/screens/WorldMapScreen';
 import { GameScreen } from './src/screens/GameScreen';
+import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
+import { syncLeaderboard } from './src/utils/leaderboard';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { CANDY_BACKDROP } from './src/utils/theme';
 import { initAds } from './src/ads/adManager';
@@ -42,6 +44,8 @@ export default function App() {
     (async () => {
       await storageReady;
       const accepted = await getLegalAccepted();
+      // Catch up anything completed while offline (no-op unless joined).
+      syncLeaderboard().catch(() => {});
       if (alive) {
         if (!accepted) {
           setShowLegalAcceptance(true);
@@ -93,7 +97,7 @@ export default function App() {
         setActiveScreen(isDailyChallenge ? 'home' : 'map');
         return true;
       }
-      if (activeScreen === 'map') {
+      if (activeScreen === 'map' || activeScreen === 'leaderboard') {
         setActiveScreen('home');
         return true;
       }
@@ -133,6 +137,7 @@ export default function App() {
             {renderedScreen === 'home' && <HomeScreen />}
             {renderedScreen === 'map' && <WorldMapScreen />}
             {renderedScreen === 'game' && <GameScreen />}
+            {renderedScreen === 'leaderboard' && <LeaderboardScreen />}
           </ErrorBoundary>
         </Animated.View>
         <StatusBar style="light" />

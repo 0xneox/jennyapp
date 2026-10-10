@@ -86,7 +86,7 @@ import { telemetry } from '../utils/telemetry';
 // Unlock every level for local testing only. Must stay false for release.
 const DEV_UNLOCK_ALL_LEVELS = false;
 
-export type ScreenName = 'home' | 'map' | 'game';
+export type ScreenName = 'home' | 'map' | 'game' | 'leaderboard';
 
 interface GameStore extends Omit<GameState, 'currentLevel'> {
   activeScreen: ScreenName;
