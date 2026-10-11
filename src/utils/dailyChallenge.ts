@@ -2,7 +2,6 @@
 import * as storage from './storage';
 export type DailyChallengeData = storage.DailyChallengeData;
 export const STREAK_MAX_BONUS_HINTS = storage.STREAK_MAX_BONUS_HINTS;
-import { APP_NAME } from './theme';
 
 export interface DailyChallengeState {
   currentStreak: number;
@@ -440,29 +439,3 @@ export async function repairBrokenStreak(): Promise<boolean> {
   return true;
 }
 
-export function generateDailyShareText(params: {
-  streak: number;
-  moves: number;
-  timeSeconds: number;
-  heartsLeft: number;
-  gridSize: number;
-  dateDisplay?: string;
-}): string {
-  const { streak, moves, timeSeconds, heartsLeft, gridSize, dateDisplay } = params;
-  const dateStr = dateDisplay || getFormattedTodayDisplay();
-  const minutes = Math.floor(timeSeconds / 60);
-  const seconds = (timeSeconds % 60).toString().padStart(2, '0');
-  const timeFormatted = `${minutes}:${seconds}`;
-
-  const heartIcons = Array(Math.max(0, Math.min(3, heartsLeft))).fill('❤️').join(' ');
-  const starStatus = heartsLeft === 3 ? '🐾 Paw-fect Clear!' : '🐶 Puzzle Cleared!';
-
-  return [
-    `${APP_NAME} 🐕 ${dateStr}`,
-    `Daily Walk: ${gridSize}×${gridSize} Meadow`,
-    `🔥 Streak: ${streak} ${streak === 1 ? 'Day' : 'Days'}`,
-    `${heartIcons} • 🎯 ${moves} Moves • ⏱️ ${timeFormatted}`,
-    `${starStatus}`,
-    `\nCan you find all the puppies? 🐾`,
-  ].join('\n');
-}

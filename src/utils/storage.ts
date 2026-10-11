@@ -486,11 +486,11 @@ export const PUPPY_MILESTONES: PuppyMilestone[] = [
     chapter: 20,
     level: 400,
     breedName: 'Highland Terrier Scout',
-    badgeTitle: 'Linked Bed Pioneer 🔗',
+    badgeTitle: 'Linked Bed Pioneer 🦴',
     icon: '🐶',
     quote: 'Fearless and spirited! Mastered the magic of linked beds across distant gardens!',
     color: '#8E44AD',
-    powerUnlocked: 'Linked Beds! 🔗 Two flower beds can share one puppy!',
+    powerUnlocked: 'Linked Beds! 🦴 Two flower beds can share one puppy!',
   },
   {
     chapter: 30,
@@ -500,7 +500,7 @@ export const PUPPY_MILESTONES: PuppyMilestone[] = [
     icon: '🐺',
     quote: 'Wise and watchful! Handles cats AND linked beds together like a true expert!',
     color: '#1565C0',
-    powerUnlocked: 'Combo Gardens! 😾🔗 Cats and linked beds together!',
+    powerUnlocked: 'Combo Gardens! 😾🦴 Cats and linked beds together!',
   },
   {
     chapter: 40,
@@ -537,6 +537,25 @@ export const loadClaimedAdoptions = async (): Promise<number[]> => {
     return parseNumberArray(await getItem(ADOPTIONS_KEY));
   } catch (error) {
     console.error('Error loading claimed adoptions:', error);
+    return [];
+  }
+};
+
+const STAR_MILESTONES_KEY = '@jenny_claimed_star_milestones_v1';
+
+export const saveClaimedStarMilestones = async (milestones: number[]): Promise<void> => {
+  try {
+    await setItem(STAR_MILESTONES_KEY, JSON.stringify(milestones));
+  } catch (error) {
+    console.error('Error saving claimed star milestones:', error);
+  }
+};
+
+export const loadClaimedStarMilestones = async (): Promise<number[]> => {
+  try {
+    return parseNumberArray(await getItem(STAR_MILESTONES_KEY));
+  } catch (error) {
+    console.error('Error loading claimed star milestones:', error);
     return [];
   }
 };

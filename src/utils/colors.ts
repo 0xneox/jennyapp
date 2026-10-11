@@ -166,29 +166,44 @@ export const RAINBOW_CANDY_PALETTE: RegionTheme[] = [
 ];
 
 /**
- * Wide, 16-element stride so a 4-region board lands on
- * Cherry / Tropical Teal / Pumpkin / Royal Indigo — warm vs cool maximum
- * contrast even at tiny grid sizes. 16-element ring is a power-of-2 *and*
- * divisible by 4, so every board (4/5/6/7/8/9/10 regions) gets maximum hue
- * spread with zero accidental warm-cluster or purple-cluster neighbours.
+ * Region id → palette index lookup. A board with n regions uses the first n
+ * entries. The order maximises hue separation on TWO axes:
+ *
+ *   1. Set spread — every prefix is a max-min-spaced subset, so the smallest
+ *      hue gap on any board is: 4 regions: 70°  5: 40°  6: 40°  7: 30°
+ *      8: 28°  9: 28°  10: 18° (vs 8–12° in the old order).
+ *   2. Consecutive-id distance — the generator lays regions in rough row
+ *      bands, so neighbouring ids are usually adjacent cells. Every
+ *      consecutive pair below is ≥58° apart; the remaining close pairs
+ *      (Leaf/Teal 32°, Plum/Lilac 30°) sit 3+ ids apart and rarely touch.
+ *
+ * The redundant warm hues (Peach ~25°, Lemon ~50°, Burgundy ~350°,
+ * Coral ~351°) sit in slots 11–16: no board exceeds 10 regions (max
+ * gridSize = 10), so a second near-identical red can never share a board
+ * with Cherry Red — the "two reds" confusion seen on levels 342 & 522
+ * (Cherry vs Burgundy sat 8° apart in the old order). The per-level
+ * hueShift rotates every hue by the same amount, so these gaps hold on all
+ * 1200 levels.
  */
 const REGION_HUE_ORDER = [
-  0,  // Cherry Red     (warm red)
-  10, // Ocean Blue     (cool blue) — opposite
-  6,  // Lemon Gold     (warm yellow)
-  12, // Lilac Lavender (cool purple) — opposite
-  4,  // Pumpkin Orange (warm)
-  8,  // Tropical Teal  (cool)
-  15, // Burgundy       (deep warm)
-  7,  // Leaf Green     (cool mid)
-  1,  // Hot Pink       (vibrant warm)
-  9,  // Sky Cyan       (vibrant cool)
-  3,  // Sunset Peach   (warm)
-  11, // Royal Indigo   (cool deep)
-  2,  // Coral          (warm mid)
-  14, // Plum Magenta   (deep cool)
-  5,  // Lime Punch     (warm-green)
-  13, // Grape Violet   (cool purple)
+  0,  // Cherry Red     (358°)
+  10, // Ocean Blue     (218°)
+  6,  // Lime Punch     (84°)
+  14, // Plum Magenta   (288°)
+  4,  // Pumpkin Orange (38°)
+  8,  // Tropical Teal  (174°)
+  12, // Lilac Lavender (258°)
+  1,  // Hot Pink       (330°)
+  7,  // Leaf Green     (142°)
+  9,  // Sky Cyan       (200°)
+  // --- Slots 10–15: unreachable today (no board has >10 regions); kept so
+  //     regionId wraps cyclically if oversized boards ever arrive. ---
+  11, // Royal Indigo   (236°)
+  3,  // Sunset Peach   (25°)
+  13, // Grape Violet   (270°)
+  5,  // Lemon Gold     (50°)
+  15, // Burgundy       (350°)
+  2,  // Coral          (351°)
 ];
 
 export interface LevelThemeSeed {

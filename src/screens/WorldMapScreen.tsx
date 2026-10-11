@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
@@ -12,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../store/gameStore';
-import { CHAPTERS, getChapterIndexForLevel } from '../data/chapterData';
+import { CHAPTERS } from '../data/chapterData';
 import { getTotalStats, getTotalScore, GameStats } from '../utils/statistics';
 import { soundManager } from '../utils/soundManager';
 import {
@@ -26,6 +27,9 @@ import { CandyPanel } from '../components/candy/CandyPanel';
 import { AdBanner } from '../components/AdBanner';
 import { PostageStamp } from '../components/PostageStamp';
 import { ChapterStampModal } from '../components/ChapterStampModal';
+import { AdoptionModal } from '../components/AdoptionModal';
+import { PUPPY_MILESTONES, loadClaimedAdoptions, PuppyMilestone } from '../utils/storage';
+import { getPuppyMilestoneImage } from '../utils/puppyImages';
 import { Chapter } from '../data/chapterData';
 import { CANDY_GOLD, CANDY_SURFACE, CANDY_TEXT } from '../utils/theme';
 
@@ -37,10 +41,9 @@ export const WorldMapScreen: React.FC = () => {
   const [graceRepairBusy, setGraceRepairBusy] = useState(false);
   const { redeemStreakShopItem: _skip, refreshStreakHintsCache: _skip2 } = useGameStore();
 
-  // Initialize selected chapter to the one containing currentLevel
-  const initialChapterIndex = getChapterIndexForLevel(currentLevel);
-  const [selectedChapterIndex, setSelectedChapterIndex] = useState(initialChapterIndex);
   const [inspectedStamp, setInspectedStamp] = useState<Chapter | null>(null);
+  const [claimedAdoptions, setClaimedAdoptions] = useState<number[]>([]);
+  const [viewedMilestone, setViewedMilestone] = useState<PuppyMilestone | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -48,6 +51,7 @@ export const WorldMapScreen: React.FC = () => {
     let cancelled = false;
     getTotalStats().then(s => { if (!cancelled) setStats(s); }).catch(() => {});
     getDailyChallengeState().then(d => { if (!cancelled) setDailyState(d); }).catch(() => {});
+    loadClaimedAdoptions().then(c => { if (!cancelled) setClaimedAdoptions(c); }).catch(() => {});
 
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -83,7 +87,6 @@ export const WorldMapScreen: React.FC = () => {
     };
   }, []);
 
-  const activeChapter = CHAPTERS[selectedChapterIndex];
   const totalScore = stats ? getTotalScore(stats) : 0;
 
   // Helper to test if a level has been completed
@@ -94,23 +97,48 @@ export const WorldMapScreen: React.FC = () => {
     return lvl < currentLevel;
   };
 
-  // Calculate completed chapters (stamps earned)
-  const stampsCollected = CHAPTERS.filter(ch => {
+  // Option 1 — Focused Horizon:
+  // 1. Earned chapters live permanently in the Stamp Album.
+  // 2. The first unfinished chapter is featured front-and-center as Current Destination.
+  // 3. At most one immediately following chapter is teased as Next Destination.
+  const collectedChapters = CHAPTERS.filter(ch => {
     for (let l = ch.start; l <= ch.end; l++) {
       if (!isLevelCompleted(l)) return false;
     }
     return true;
-  }).length;
+  });
+  const stampsCollected = collectedChapters.length;
 
-  const handleSelectLevel = (level: number) => {
-    if (level > unlockedLevels) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      return;
+  const uncompletedChapters = CHAPTERS.filter(
+    ch => !collectedChapters.some(c => c.id === ch.id)
+  );
+  const activeChapter = uncompletedChapters[0] ?? null;
+  const nextChapter = uncompletedChapters[1] ?? null;
+  const adoptedPuppies = PUPPY_MILESTONES.filter(m => claimedAdoptions.includes(m.level));
+
+  // First unfinished, reachable level of the current active chapter
+  const nextPlayableLevel = activeChapter
+    ? (() => {
+        for (let l = activeChapter.start; l <= activeChapter.end; l++) {
+          if (!isLevelCompleted(l)) return l <= unlockedLevels ? l : null;
+        }
+        return null;
+      })()
+    : null;
+
+  // Progress within the current active chapter
+  let activeCompletedCount = 0;
+  if (activeChapter) {
+    for (let l = activeChapter.start; l <= activeChapter.end; l++) {
+      if (isLevelCompleted(l)) activeCompletedCount++;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    soundManager.play('button');
-    startLevel(level);
-  };
+  }
+  const activeTotalLevels = activeChapter
+    ? activeChapter.end - activeChapter.start + 1
+    : 20;
+  const activeProgressPct = Math.round(
+    (activeCompletedCount / activeTotalLevels) * 100
+  );
 
   const handleBackHome = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -126,8 +154,9 @@ export const WorldMapScreen: React.FC = () => {
         <CandyButton
           skin="grape"
           size="sm"
-          label="Home"
-          icon={<Text style={styles.backButtonIcon}>⬅️</Text>}
+          accessibilityLabel="Home"
+          style={styles.backButton}
+          icon={<Text style={styles.backButtonIcon}>🏠</Text>}
           onPress={handleBackHome}
         />
 
@@ -224,219 +253,209 @@ export const WorldMapScreen: React.FC = () => {
             </CandyPanel>
           )}
 
-          {/* Horizontal Chapter Selector Cards */}
-          <Text style={styles.sectionHeader}>PASSPORT DESTINATIONS 🧭</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chapterCarousel}
-          >
-            {CHAPTERS.map((chapter, idx) => {
-              const isSelected = idx === selectedChapterIndex;
-              const chapterUnlocked = unlockedLevels >= chapter.start;
-              
-              // Calculate completion in this chapter
-              let chapterCompletedCount = 0;
-              for (let l = chapter.start; l <= chapter.end; l++) {
-                if (isLevelCompleted(l)) chapterCompletedCount++;
-              }
-              const progressPct = Math.round(
-                (chapterCompletedCount / (chapter.end - chapter.start + 1)) * 100
-              );
-
-              return (
-                <TouchableOpacity
-                  key={chapter.id}
-                  style={[
-                    styles.chapterCard,
-                    isSelected && [
-                      styles.chapterCardSelected,
-                      { borderColor: chapter.accentColor },
-                    ],
-                  ]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setSelectedChapterIndex(idx);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.chapterCardHeader}>
-                    <Text style={styles.chapterIcon}>{chapter.icon}</Text>
-                    <View
-                      style={[
-                        styles.diffBadge,
-                        { backgroundColor: chapter.accentColor },
-                      ]}
-                    >
-                      <Text style={styles.diffBadgeText}>
-                        {chapter.difficultyBadge}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.chapterCardTitle,
-                      isSelected && { color: chapter.accentColor },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    Stamp #{chapter.id}
-                  </Text>
-                  <Text style={styles.chapterCardSub} numberOfLines={1}>
-                    {chapter.title}
-                  </Text>
-
-                  {/* Stamp Seal if 100% completed */}
-                  {progressPct === 100 ? (
-                    <TouchableOpacity
-                      style={styles.stampSealInteractive}
-                      activeOpacity={0.75}
-                      onPress={(e) => {
-                        e.stopPropagation();
+          {/* Current Active Chapter Hero Card */}
+          {activeChapter && (
+            <>
+              <Text style={styles.sectionHeader}>CURRENT DESTINATION 🧭</Text>
+              <CandyPanel
+                style={styles.chapterHeroCard}
+                contentStyle={[
+                  styles.chapterHeroFace,
+                  { borderLeftColor: activeChapter.accentColor },
+                ]}
+              >
+                <View style={styles.chapterHeroHeader}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      if (activeCompletedCount === activeTotalLevels) {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                         soundManager.play('button');
-                        setInspectedStamp(chapter);
-                      }}
-                    >
-                      <PostageStamp chapter={chapter} size="sm" isStamped={true} />
-                    </TouchableOpacity>
-                  ) : (
-                    <>
-                      {/* Mini Progress Bar */}
-                      <View style={styles.progressTrack}>
-                        <View
-                          style={[
-                            styles.progressBar,
-                            {
-                              width: `${progressPct}%`,
-                              backgroundColor: chapter.accentColor,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text style={styles.progressText}>
-                        {chapterCompletedCount}/20 ({progressPct}%)
+                        setInspectedStamp(activeChapter);
+                      }
+                    }}
+                  >
+                    <PostageStamp
+                      chapter={activeChapter}
+                      size="sm"
+                      isStamped={activeCompletedCount === activeTotalLevels}
+                    />
+                  </TouchableOpacity>
+                  <View style={styles.chapterHeroTextCol}>
+                    <View style={styles.chapterTitleRow}>
+                      <Text style={styles.chapterHeroTitle} numberOfLines={1}>
+                        Stamp #{activeChapter.id}: {activeChapter.title}
                       </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                      <View
+                        style={[
+                          styles.diffBadge,
+                          { backgroundColor: activeChapter.accentColor },
+                        ]}
+                      >
+                        <Text style={styles.diffBadgeText}>
+                          {activeChapter.difficultyBadge}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.chapterHeroGridSize}>
+                      Grid: {activeChapter.gridSizes} • {activeChapter.subtitle}
+                    </Text>
+                  </View>
+                </View>
 
-          {/* Chapter Details Hero Card */}
-          <CandyPanel
-            style={styles.chapterHeroCard}
-            contentStyle={[
-              styles.chapterHeroFace,
-              { borderLeftColor: activeChapter.accentColor },
-            ]}
-          >
-            <View style={styles.chapterHeroHeader}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  let allDone = true;
-                  for (let l = activeChapter.start; l <= activeChapter.end; l++) {
-                    if (!isLevelCompleted(l)) {
-                      allDone = false;
-                      break;
-                    }
-                  }
-                  if (allDone) {
+                <Text style={styles.chapterHeroDesc}>{activeChapter.description}</Text>
+
+                {/* Progress Bar inside Current Chapter Card */}
+                <View style={styles.heroProgressSection}>
+                  <View style={styles.heroProgressHeader}>
+                    <Text style={styles.heroProgressLabel}>Meadow Progress</Text>
+                    <Text style={styles.heroProgressPercent}>
+                      {activeCompletedCount}/{activeTotalLevels} ({activeProgressPct}%)
+                    </Text>
+                  </View>
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressBar,
+                        {
+                          width: `${activeProgressPct}%`,
+                          backgroundColor: activeChapter.accentColor,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                <CandyButton
+                  block
+                  size="lg"
+                  skin="green"
+                  label={nextPlayableLevel ? `Play Level ${nextPlayableLevel} 🐾` : '🔒 Locked'}
+                  disabled={!nextPlayableLevel}
+                  onPress={() => {
+                    if (!nextPlayableLevel) return;
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     soundManager.play('button');
-                    setInspectedStamp(activeChapter);
-                  }
-                }}
-              >
-                <PostageStamp
-                  chapter={activeChapter}
-                  size="sm"
-                  isStamped={CHAPTERS.filter(ch => ch.id === activeChapter.id).every(ch => {
-                    for (let l = ch.start; l <= ch.end; l++) {
-                      if (!isLevelCompleted(l)) return false;
-                    }
-                    return true;
-                  })}
+                    startLevel(nextPlayableLevel);
+                  }}
                 />
-              </TouchableOpacity>
-              <View style={styles.chapterHeroTextCol}>
-                <Text style={styles.chapterHeroTitle}>
-                  Stamp #{activeChapter.id}: {activeChapter.title}
-                </Text>
-                <Text style={styles.chapterHeroGridSize}>
-                  Grid: {activeChapter.gridSizes} • {activeChapter.subtitle}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.chapterHeroDesc}>{activeChapter.description}</Text>
-          </CandyPanel>
+              </CandyPanel>
+            </>
+          )}
 
-          {/* Level Nodes Grid */}
-          <CandyPanel contentStyle={styles.levelsSection}>
-            <View style={styles.levelsSectionHeader}>
-              <Text style={styles.levelsSectionTitle}>Levels</Text>
-              <Text style={styles.levelsSectionHint}>
-                ⭐ Completed • 📍 Current • 🔒 Locked
+          {/* Next Destination Preview Teaser */}
+          {nextChapter && (
+            <>
+              <Text style={styles.sectionHeader}>NEXT DESTINATION 🗺️</Text>
+              <CandyPanel
+                style={styles.teaserCard}
+                contentStyle={styles.teaserFace}
+              >
+                <View style={styles.teaserHeader}>
+                  <View style={styles.teaserTitleRow}>
+                    <Text style={styles.teaserLockIcon}>🔒</Text>
+                    <Text style={styles.teaserTitle} numberOfLines={1}>
+                      Stamp #{nextChapter.id}: {nextChapter.title}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.diffBadge,
+                      { backgroundColor: nextChapter.accentColor, opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={styles.diffBadgeText}>
+                      {nextChapter.difficultyBadge}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.teaserSub}>
+                  Unlocks at Level {nextChapter.start} • Grid: {nextChapter.gridSizes}
+                </Text>
+                <Text style={styles.teaserDesc} numberOfLines={2}>
+                  {nextChapter.subtitle}
+                </Text>
+              </CandyPanel>
+            </>
+          )}
+
+          {!activeChapter && (
+            <Text style={styles.allCollectedText}>
+              🏆 All 50 stamps collected — you cleared every meadow!
+            </Text>
+          )}
+
+          {/* Stamp Album — earned stamps stay viewable forever */}
+          <Text style={styles.sectionHeader}>STAMP ALBUM 📮</Text>
+          {collectedChapters.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chapterCarousel}
+            >
+              {collectedChapters.map(chapter => (
+                <TouchableOpacity
+                  key={chapter.id}
+                  activeOpacity={0.8}
+                  style={styles.albumStamp}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    soundManager.play('button');
+                    setInspectedStamp(chapter);
+                  }}
+                >
+                  <PostageStamp chapter={chapter} size="sm" isStamped={true} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptyCollectionBox}>
+              <Text style={styles.emptyCollectionText}>
+                Complete all 20 levels in Chapter 1 to earn your first passport stamp!
               </Text>
             </View>
+          )}
 
-            <View style={styles.levelGrid}>
-              {Array.from(
-                { length: activeChapter.end - activeChapter.start + 1 },
-                (_, i) => activeChapter.start + i
-              ).map(lvl => {
-                const completed = isLevelCompleted(lvl);
-                const isCurrent = lvl === currentLevel;
-                const isLocked = lvl > unlockedLevels;
-
+          {/* Adopted Puppies — earned certificates stay viewable forever */}
+          <Text style={styles.sectionHeader}>ADOPTED PUPPIES 🐕</Text>
+          {adoptedPuppies.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chapterCarousel}
+            >
+              {adoptedPuppies.map(m => {
+                const photo = getPuppyMilestoneImage(m);
                 return (
                   <TouchableOpacity
-                    key={lvl}
-                    style={[
-                      styles.levelNode,
-                      completed && styles.levelNodeCompleted,
-                      isCurrent && [
-                        styles.levelNodeCurrent,
-                        { borderColor: activeChapter.accentColor },
-                      ],
-                      isLocked && styles.levelNodeLocked,
-                    ]}
-                    onPress={() => handleSelectLevel(lvl)}
-                    disabled={isLocked}
-                    activeOpacity={0.7}
+                    key={m.level}
+                    activeOpacity={0.8}
+                    style={styles.pupCard}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      soundManager.play('button');
+                      setViewedMilestone(m);
+                    }}
                   >
-                    {isLocked ? (
-                      <Text style={styles.lockIcon}>🔒</Text>
-                    ) : (
-                      <>
-                        <Text
-                          style={[
-                            styles.levelNumber,
-                            completed && styles.levelNumberCompleted,
-                            isCurrent && styles.levelNumberCurrent,
-                          ]}
-                        >
-                          {lvl}
-                        </Text>
-                        {completed && <Text style={styles.starBadge}>⭐</Text>}
-                        {isCurrent && !completed && (
-                          <View
-                            style={[
-                              styles.currentDot,
-                              { backgroundColor: activeChapter.accentColor },
-                            ]}
-                          />
-                        )}
-                      </>
-                    )}
+                    <Image
+                      source={photo}
+                      style={[styles.pupCardPhoto, { borderColor: m.color || CANDY_GOLD.base }]}
+                      resizeMode="cover"
+                    />
+                    <Text style={styles.pupCardName} numberOfLines={1}>
+                      {m.breedName}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptyCollectionBox}>
+              <Text style={styles.emptyCollectionText}>
+                Reach level milestones (like Level 10, 50...) to adopt puppies and collect certificates!
+              </Text>
             </View>
-          </CandyPanel>
+          )}
         </Animated.View>
       </ScrollView>
 
@@ -448,6 +467,13 @@ export const WorldMapScreen: React.FC = () => {
         visible={!!inspectedStamp}
         chapter={inspectedStamp}
         onClose={() => setInspectedStamp(null)}
+      />
+
+      {/* Adopted puppy certificate re-view */}
+      <AdoptionModal
+        visible={!!viewedMilestone}
+        milestone={viewedMilestone}
+        onClose={() => setViewedMilestone(null)}
       />
     </SafeAreaView>
     </CandyBackground>
@@ -468,8 +494,14 @@ const styles = StyleSheet.create({
     borderBottomColor: CANDY_SURFACE.border,
     backgroundColor: 'rgba(20, 10, 44, 0.35)',
   },
+  backButton: {
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   backButtonIcon: {
-    fontSize: 14,
+    fontSize: 16,
+    textAlign: 'center',
   },
   headerTitleGroup: {
     alignItems: 'center',
@@ -498,7 +530,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 0,
   },
   headerPlaceholder: {
-    width: 70,
+    width: 44,
   },
   scrollContent: {
     paddingBottom: 40,
@@ -517,6 +549,46 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 10,
     marginLeft: 4,
+  },
+
+  /* Stamp Album + Adopted Puppies collections */
+  albumStamp: {
+    marginRight: 14,
+  },
+  pupCard: {
+    width: 96,
+    backgroundColor: CANDY_SURFACE.top,
+    borderRadius: 16,
+    padding: 10,
+    borderWidth: 2,
+    borderColor: CANDY_SURFACE.bevel,
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  pupCardIcon: {
+    fontSize: 34,
+    marginBottom: 6,
+  },
+  pupCardPhoto: {
+    width: 62,
+    height: 62,
+    borderRadius: 14,
+    marginBottom: 6,
+    borderWidth: 2,
+    borderColor: CANDY_GOLD.base,
+  },
+  pupCardName: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: CANDY_TEXT.onDark,
+    textAlign: 'center',
+  },
+  allCollectedText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: CANDY_TEXT.onDark,
+    textAlign: 'center',
+    marginVertical: 16,
   },
 
   /* Chapter Carousel */
@@ -599,33 +671,10 @@ const styles = StyleSheet.create({
     color: CANDY_TEXT.onDarkMuted,
     textAlign: 'right',
   },
-  stampSealInteractive: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-    marginBottom: 2,
-  },
-  stampSealBadge: {
-    borderWidth: 2,
-    borderRadius: 8,
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ rotate: '-4deg' }],
-    backgroundColor: 'rgba(20, 10, 44, 0.5)',
-    marginTop: 2,
-  },
-  stampSealText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-
   /* Chapter Hero Card */
   chapterHeroCard: {
-    marginTop: 16,
-    marginBottom: 18,
+    marginTop: 8,
+    marginBottom: 16,
   },
   chapterHeroFace: {
     padding: 16,
@@ -642,11 +691,19 @@ const styles = StyleSheet.create({
   },
   chapterHeroTextCol: {
     flex: 1,
+    marginLeft: 10,
+  },
+  chapterTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   chapterHeroTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '900',
     color: CANDY_TEXT.onDark,
+    flex: 1,
+    marginRight: 6,
   },
   chapterHeroGridSize: {
     fontSize: 12,
@@ -659,6 +716,91 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: CANDY_TEXT.onDarkSoft,
     lineHeight: 18,
+    marginBottom: 12,
+  },
+  heroProgressSection: {
+    marginBottom: 16,
+  },
+  heroProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  heroProgressLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: CANDY_TEXT.onDarkSoft,
+  },
+  heroProgressPercent: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: CANDY_TEXT.onDark,
+  },
+
+  /* Next Destination Teaser Card */
+  teaserCard: {
+    marginTop: 6,
+    marginBottom: 16,
+  },
+  teaserFace: {
+    padding: 14,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: 'rgba(20, 10, 44, 0.55)',
+  },
+  teaserHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  teaserTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 6,
+  },
+  teaserLockIcon: {
+    fontSize: 15,
+    marginRight: 6,
+  },
+  teaserTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: CANDY_TEXT.onDarkSoft,
+  },
+  teaserSub: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: CANDY_GOLD.base,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  teaserDesc: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: CANDY_TEXT.onDarkMuted,
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
+
+  /* Empty Collections Placeholder */
+  emptyCollectionBox: {
+    backgroundColor: 'rgba(20, 10, 44, 0.4)',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 16,
+  },
+  emptyCollectionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: CANDY_TEXT.onDarkMuted,
+    textAlign: 'center',
+    lineHeight: 16,
   },
 
   /* Level Nodes */
@@ -708,10 +850,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
     marginBottom: 12,
   },
-  levelNodeCompleted: {
-    backgroundColor: '#26B85B',
-    borderColor: '#12692F',
-  },
   levelNodeCurrent: {
     borderWidth: 3,
     backgroundColor: '#F5B324',
@@ -731,21 +869,12 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1.5 },
     textShadowRadius: 0,
   },
-  levelNumberCompleted: {
-    color: '#FFFFFF',
-  },
   levelNumberCurrent: {
     fontWeight: '900',
     color: '#4A3000',
   },
   lockIcon: {
     fontSize: 16,
-  },
-  starBadge: {
-    position: 'absolute',
-    bottom: 2,
-    right: 3,
-    fontSize: 11,
   },
   currentDot: {
     position: 'absolute',

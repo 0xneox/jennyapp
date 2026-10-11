@@ -210,13 +210,20 @@ export const LeaderboardScreen: React.FC = () => {
     <CandyBackground>
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
-          <CandyButton size="sm" skin="grape" label="← Home" onPress={() => { tap(); setActiveScreen('home'); }} />
+          <CandyButton
+            size="sm"
+            skin="grape"
+            accessibilityLabel="Home"
+            style={styles.backButton}
+            icon={<Text style={styles.backButtonIcon}>🏠</Text>}
+            onPress={() => { tap(); setActiveScreen('home'); }}
+          />
           <Text style={styles.title}>🏆 Leaderboard</Text>
           {profile?.joined ? (
             <TouchableOpacity onPress={() => { tap(); setShowProfile(true); }} accessibilityLabel="Edit profile">
               <PlayerAvatar avatar={profile.avatar} size={34} />
             </TouchableOpacity>
-          ) : <View style={{ width: 40 }} />}
+          ) : <View style={{ width: 44 }} />}
         </View>
         <View style={styles.content}>{body()}</View>
       </SafeAreaView>
@@ -239,6 +246,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 12,
+  },
+  backButton: {
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButtonIcon: {
+    fontSize: 16,
+    textAlign: 'center',
   },
   title: {
     fontSize: 22,

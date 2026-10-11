@@ -94,6 +94,7 @@ export function calculateLevelScore(
 export interface CompletionResult extends StarResult {
   score: number;
   totalScore: number;
+  totalStars?: number;
   isNewBestScore: boolean;
 }
 
@@ -326,11 +327,25 @@ export const recordLevelCompletion = async (
   }
 
   await saveStats(stats);
-  return { ...starResult, score, totalScore: getTotalScore(stats), isNewBestScore };
+  return {
+    ...starResult,
+    score,
+    totalScore: getTotalScore(stats),
+    totalStars: getTotalStars(stats),
+    isNewBestScore,
+  };
 };
 
 export const getTotalScore = (stats: GameStats): number =>
   Object.values(stats.levelStats).reduce((sum, l) => sum + (l.bestScore ?? 0), 0);
+
+export const getTotalStars = (stats: GameStats): number =>
+  Math.floor(
+    Object.values(stats.levelStats).reduce(
+      (sum, l) => sum + (l.stars ?? (l.completions > 0 ? 3 : 0)),
+      0
+    )
+  );
 
 export const getLevelStats = async (level: number): Promise<LevelStats | null> => {
   const stats = await loadStats();

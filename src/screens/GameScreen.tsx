@@ -6,8 +6,6 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
-  Share,
-  Platform,
   Image,
   useWindowDimensions,
   BackHandler,
@@ -20,7 +18,6 @@ import { CandyBackground } from '../components/candy/CandyBackground';
 import { CandyButton } from '../components/candy/CandyButton';
 import { CandyPanel } from '../components/candy/CandyPanel';
 import {
-  APP_NAME,
   CANDY_GOLD,
   CANDY_SURFACE,
   CANDY_TEXT,
@@ -35,6 +32,16 @@ import { PuppySprite } from '../components/assets/PuppySprite';
 
 const PAW_IMAGE = require('../../assets/paw.png');
 const JENNY_PUPPY_IMAGE = require('../../assets/jennyim.png');
+
+// Chapters whose intro story teaches a brand-new mechanic (see chapterStories.ts).
+// On these chapters the 3-page story is shown INSTEAD of the interactive
+// MechanicIntroTutorial so the player doesn't get two rule sets back-to-back.
+const STORY_DEBUT_MECHANICS: Partial<Record<number, MechanicType>> = {
+  11: 'cats',
+  16: 'linked',
+  31: 'twin',
+  52: 'hungry',
+};
 import * as Haptics from 'expo-haptics';
 import {
   setTutorialSeen,
@@ -44,12 +51,14 @@ import {
   loadClaimedAdoptions,
   saveClaimedAdoptions,
   getMechanicIntrosSeen,
+  setMechanicIntroSeen,
   getChapterStoriesSeen,
   getClaimedChapterStamps,
   saveClaimedChapterStamp,
 } from '../utils/storage';
 import { soundManager } from '../utils/soundManager';
 import { recordLevelCompletion, getTotalStats, getTotalScore, PUPPY_SCORE } from '../utils/statistics';
+import { checkAndClaimStarMilestones, ClaimResult } from '../utils/starRewards';
 import { syncLeaderboard, DAILY_POINTS } from '../utils/leaderboard';
 import { getLevelDifficulty, getDifficultyColor, getDifficultyLabel } from '../utils/levelHelpers';
 import { getChapterForLevel, Chapter } from '../data/chapterData';
@@ -58,11 +67,9 @@ import { getChapterStory, CHAPTERS_WITH_STORIES, ChapterStory } from '../data/ch
 import { JennyAvatar, JennyMood } from '../components/assets/JennyAvatar';
 import { InteractiveTutorial } from '../components/InteractiveTutorial';
 import { LevelRulesModal } from '../components/LevelRulesModal';
-import { getRuleChips } from '../data/levelRules';
 import { JENNY_CHEERS } from '../data/storyLore';
 import {
   recordDailyCompletion,
-  generateDailyShareText,
 } from '../utils/dailyChallenge';
 import { AdoptionModal } from '../components/AdoptionModal';
 import { ChapterStampModal } from '../components/ChapterStampModal';
@@ -105,6 +112,7 @@ export const GameScreen: React.FC = () => {
     mechanics,
     lastMistakeForgiven,
     hintsUsed,
+    consumableHints,
     adFreeHints,
     grantAdFreeHint,
     activeHint,
@@ -113,6 +121,7 @@ export const GameScreen: React.FC = () => {
     refreshStreakHintsCache,
     sessionGameOverCount,
     applyEasierLevelOption,
+    awardConsumables,
   } = useGameStore();
 
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -172,8 +181,9 @@ export const GameScreen: React.FC = () => {
   const prevPuppyCellsRef = useRef<Set<string>>(new Set());
   const scoreChipScale = useRef(new Animated.Value(1)).current;
   const [activeMilestone, setActiveMilestone] = useState<PuppyMilestone | null>(null);
+  const [starRewardClaim, setStarRewardClaim] = useState<ClaimResult | null>(null);
   const [activeChapterStamp, setActiveChapterStamp] = useState<Chapter | null>(null);
-  const [shareToast, setShareToast] = useState(false);
+  const [queuedStamp, setQueuedStamp] = useState<Chapter | null>(null);
 
   // Wrong Move Feedback State
   const [wrongMoveToast, setWrongMoveToast] = useState<{ title: string; sub: string } | null>(null);
@@ -319,7 +329,6 @@ export const GameScreen: React.FC = () => {
   const isMountedRef = useRef(true);
   const moodResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const milestoneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const shareToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrongToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrongCellTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintBubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -327,7 +336,7 @@ export const GameScreen: React.FC = () => {
   // Cancel all pending timeouts on unmount
   useEffect(() => {
     isMountedRef.current = true;
-    const timers = [moodResetTimer, milestoneTimer, shareToastTimer, wrongToastTimer, wrongCellTimer, hintBubbleTimer, catAuraTimer, linkedPulseTimer, comboTimer, comboToastTimer];
+    const timers = [moodResetTimer, milestoneTimer, wrongToastTimer, wrongCellTimer, hintBubbleTimer, catAuraTimer, linkedPulseTimer, comboTimer, comboToastTimer];
     return () => {
       isMountedRef.current = false;
       timers.forEach(ref => {
@@ -361,7 +370,6 @@ export const GameScreen: React.FC = () => {
     setLastPlacedPuppy(null);
     setIsDragging(false);
     setJennyMood('friendly');
-    setShareToast(false);
     // Paw Mark is the default tool on every level start — marking candidates
     // first is the intended solve flow; Puppy is the explicit commitment.
     setInputMode('mark');
@@ -392,37 +400,42 @@ export const GameScreen: React.FC = () => {
         if (!seen && isMountedRef.current) setShowTutorial(true);
       }).catch(() => {});
     } else {
-      // Check for chapter intro story on mechanic debut chapters
+      // Chapter intro story + new-mechanic intro tutorial. On debut chapters
+      // (11 cats, 16 linked, 31 twin, 52 hungry) the 3-page story already
+      // teaches the mechanic, so the interactive intro is suppressed and
+      // marked seen — otherwise the player sits through two rule sets.
       const chapter = getChapterForLevel(currentLevel);
-      if (CHAPTERS_WITH_STORIES.has(chapter.id)) {
-        getChapterStoriesSeen().then(seen => {
-          if (!isMountedRef.current) return;
-          if (!seen.includes(chapter.id)) {
-            const story = getChapterStory(chapter.id);
-            if (story) setActiveChapterStory(story);
-          }
-        }).catch(() => {});
-      }
-
-      // Check for new mechanic intros (cats, linked, twin, hungry)
+      const debutMechanic = STORY_DEBUT_MECHANICS[chapter.id];
       const needsCats = mechanics.catCount > 0;
       const needsLinked = mechanics.linkedCount > 0;
       const needsTwin = mechanics.puppiesPerUnit > 1;
       const needsHungry = mechanics.hungryCount > 0;
-      if (needsCats || needsLinked || needsTwin || needsHungry) {
-        getMechanicIntrosSeen().then(seen => {
+
+      Promise.all([getChapterStoriesSeen(), getMechanicIntrosSeen()])
+        .then(([seenStories, seenMech]) => {
           if (!isMountedRef.current) return;
-          if (needsCats && !seen.includes('cats')) {
-            setActiveMechanicIntro('cats');
-          } else if (needsLinked && !seen.includes('linked')) {
-            setActiveMechanicIntro('linked');
-          } else if (needsTwin && !seen.includes('twin')) {
-            setActiveMechanicIntro('twin');
-          } else if (needsHungry && !seen.includes('hungry')) {
-            setActiveMechanicIntro('hungry');
+
+          const storyUnread =
+            CHAPTERS_WITH_STORIES.has(chapter.id) && !seenStories.includes(chapter.id);
+          if (storyUnread) {
+            const story = getChapterStory(chapter.id);
+            if (story) setActiveChapterStory(story);
+            if (debutMechanic && !seenMech.includes(debutMechanic)) {
+              setMechanicIntroSeen(debutMechanic);
+            }
           }
-        }).catch(() => {});
-      }
+
+          const intro =
+            needsCats && !seenMech.includes('cats') ? 'cats' as const
+            : needsLinked && !seenMech.includes('linked') ? 'linked' as const
+            : needsTwin && !seenMech.includes('twin') ? 'twin' as const
+            : needsHungry && !seenMech.includes('hungry') ? 'hungry' as const
+            : null;
+          if (intro && !(storyUnread && intro === debutMechanic)) {
+            setActiveMechanicIntro(intro);
+          }
+        })
+        .catch(() => {});
     }
 
     // Clear any stale hint bubble on level change
@@ -505,25 +518,29 @@ export const GameScreen: React.FC = () => {
     prevHearts.current = hearts;
   }, [hearts, heartScaleAnim]);
 
-  // Hint speech bubble — Jenny explains the rule, or suggests recovery
+  // Hint message notification — non-displacing toast if deduction stalled
   useEffect(() => {
-    if (hintBubbleTimer.current) {
-      clearTimeout(hintBubbleTimer.current);
-      hintBubbleTimer.current = null;
+    if (hintMessage) {
+      setWrongMoveToast({ title: '💡 Jenny says', sub: hintMessage });
+      toastFadeAnim.setValue(0);
+      Animated.timing(toastFadeAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }).start();
+      if (wrongToastTimer.current) clearTimeout(wrongToastTimer.current);
+      wrongToastTimer.current = setTimeout(() => {
+        wrongToastTimer.current = null;
+        Animated.timing(toastFadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => {
+          if (isMountedRef.current) setWrongMoveToast(null);
+        });
+      }, 3500);
     }
-    if (activeHint) {
-      setHintBubble(activeHint.explanation);
-    } else if (hintMessage) {
-      setHintBubble(hintMessage);
-    } else {
-      setHintBubble(null);
-      return;
-    }
-    hintBubbleTimer.current = setTimeout(() => {
-      hintBubbleTimer.current = null;
-      if (isMountedRef.current) setHintBubble(null);
-    }, 6000);
-  }, [activeHint, hintMessage]);
+  }, [hintMessage, toastFadeAnim]);
 
   // Completion sequence
   useEffect(() => {
@@ -558,7 +575,7 @@ export const GameScreen: React.FC = () => {
         gridSize: board.gridSize,
         puppiesPerUnit: mechanics.puppiesPerUnit,
       })
-        .then(result => {
+        .then(async result => {
           if (cancelled) return;
           setPawfectResult(result);
           setTotalScore(result.totalScore);
@@ -566,37 +583,45 @@ export const GameScreen: React.FC = () => {
             setLevelBestScore(result.score);
             syncLeaderboard().catch(() => {});
           }
+          if (result.totalStars) {
+            const starCheck = await checkAndClaimStarMilestones(result.totalStars).catch(() => null);
+            if (starCheck && starCheck.newlyClaimed.length > 0 && !cancelled) {
+              setStarRewardClaim(starCheck);
+              awardConsumables(starCheck.totalNewHints, starCheck.totalNewUndos).catch(() => {});
+            }
+          }
         })
         .catch(() => {});
 
-      // Check milestone adoption reward
+      // Check adoption milestone + chapter stamp. Both can land on the same
+      // level (a milestone that ends a chapter), so they're claimed together
+      // but SHOWN IN SEQUENCE — certificate first, stamp on its close —
+      // instead of stacking two full-screen modals at once.
       const milestone = PUPPY_MILESTONES.find(m => m.level === currentLevel);
-      if (milestone) {
-        loadClaimedAdoptions().then(claimed => {
-          if (cancelled) return;
-          if (!claimed.includes(currentLevel)) {
-            saveClaimedAdoptions([...claimed, currentLevel]);
+      const currentChapter = getChapterForLevel(currentLevel);
+      const chapterComplete = !!currentChapter && currentLevel === currentChapter.end;
+      if (milestone || chapterComplete) {
+        Promise.all([loadClaimedAdoptions(), getClaimedChapterStamps()])
+          .then(([claimed, claimedStamps]) => {
+            if (cancelled) return;
+            const showAdoption = !!milestone && !claimed.includes(currentLevel);
+            const showStamp =
+              !!currentChapter && currentLevel === currentChapter.end &&
+              !claimedStamps.includes(currentChapter.id);
+            if (!showAdoption && !showStamp) return;
+            if (showAdoption) saveClaimedAdoptions([...claimed, currentLevel]);
+            if (showStamp && currentChapter) {
+              saveClaimedChapterStamp(currentChapter.id);
+              if (showAdoption) setQueuedStamp(currentChapter);
+            }
             milestoneTimer.current = setTimeout(() => {
               milestoneTimer.current = null;
-              if (!cancelled) setActiveMilestone(milestone);
+              if (cancelled) return;
+              if (showAdoption && milestone) setActiveMilestone(milestone);
+              else if (showStamp && currentChapter) setActiveChapterStamp(currentChapter);
             }, 700);
-          }
-        }).catch(() => {});
-      }
-
-      // Check chapter stamp completion (Level 20, 40, 60, ... 1000)
-      const currentChapter = getChapterForLevel(currentLevel);
-      if (currentChapter && currentLevel === currentChapter.end) {
-        getClaimedChapterStamps().then(claimedStamps => {
-          if (cancelled) return;
-          if (!claimedStamps.includes(currentChapter.id)) {
-            saveClaimedChapterStamp(currentChapter.id);
-            // Delay slightly after puzzle solve so celebration is punchy
-            setTimeout(() => {
-              if (!cancelled) setActiveChapterStamp(currentChapter);
-            }, 850);
-          }
-        }).catch(() => {});
+          })
+          .catch(() => {});
       }
     }
 
@@ -620,6 +645,7 @@ export const GameScreen: React.FC = () => {
         clearTimeout(milestoneTimer.current);
         milestoneTimer.current = null;
       }
+      setQueuedStamp(null);
     };
   }, [isComplete, completionScaleAnim, currentLevel, moves, hearts, isDailyChallenge, hintsUsed]);
 
@@ -628,7 +654,6 @@ export const GameScreen: React.FC = () => {
     () => board.regions.flatMap(r => (r.requiredPups === undefined ? [] : [r.requiredPups])),
     [board.regions]
   );
-  const ruleChips = useMemo(() => getRuleChips(mechanics), [mechanics]);
 
   // --- Live scoring: +PUPPY_SCORE pops per placed puppy, chip previews the
   // net level score (run gross x current star fraction) so mistakes visibly
@@ -696,47 +721,17 @@ export const GameScreen: React.FC = () => {
     prevDisplayScoreRef.current = displayScore;
   }, [displayScore, scoreChipScale]);
 
-  const handleShareDaily = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    soundManager.play('button');
-    const completionTime = Math.floor((Date.now() - levelStartTime.current) / 1000);
-    const shareText = generateDailyShareText({
-      streak: dailyResult?.streak || 1,
-      moves,
-      timeSeconds: completionTime,
-      heartsLeft: hearts,
-      gridSize: board.gridSize,
-    });
-
-    try {
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(shareText);
-        setShareToast(true);
-        if (shareToastTimer.current) clearTimeout(shareToastTimer.current);
-        shareToastTimer.current = setTimeout(() => {
-          shareToastTimer.current = null;
-          setShareToast(false);
-        }, 2400);
-      } else {
-        await Share.share({
-          message: shareText,
-          title: `${APP_NAME} Daily Walk`,
-        });
-      }
-    } catch {
-      // Ignore share sheet cancel
-    }
-  };
-
   const showWrongFeedback = (row: number, col: number, override?: { title: string; sub: string }) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     soundManager.play('wrong');
-    const { lastMistakeForgiven, gameMode, mistakes: made } = useGameStore.getState();
-    const msg = override ?? (lastMistakeForgiven
-      ? gameMode === 'zen'
+    const { gameMode, hearts: currentHearts } = useGameStore.getState();
+    const msg = override ?? (
+      gameMode === 'zen'
         ? { title: 'Not quite!', sub: 'Zen mode is forgiving — try another spot.' }
-        : { title: 'No worries! 💕', sub: `${Math.max(0, 3 - made)} oops left — try again.` }
-      : { title: 'Not quite!', sub: "That puppy can't go there." });
+        : currentHearts > 0
+          ? { title: 'Not quite! 💔', sub: `${currentHearts} ${currentHearts === 1 ? 'heart' : 'hearts'} left — try another spot.` }
+          : { title: 'Not quite!', sub: "That puppy can't go there." }
+    );
     setWrongMoveToast(msg);
     setJennyMood('sympathetic');
     if (moodResetTimer.current) clearTimeout(moodResetTimer.current);
@@ -941,22 +936,19 @@ export const GameScreen: React.FC = () => {
     setHintBubble(null);
   };
 
-  // Escalating the *current* hint (explain → spotlight → place) is always free;
-  // only a brand-new deduction counts against the free allowance.
-  const hintIsEscalating =
-    !!activeHint && board.cells[activeHint.cell.row]?.[activeHint.cell.col]?.value === 'empty';
-  const hintNeedsAd =
-    !hintIsEscalating && hintsUsed >= FREE_HINTS_PER_LEVEL + adFreeHints && adsAvailable();
+  // User can hit hint button only based on available stars and backpack hints:
+  // Level stars: up to 3 free hints (derived from the 3 stars per level), plus consumable hints from star rewards.
+  const hintsRemaining = Math.max(0, FREE_HINTS_PER_LEVEL - hintsUsed) + (consumableHints || 0);
+  const canHint = !isGameOver && !isComplete && hintsRemaining > 0;
 
   const handleHintPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!canHint) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     soundManager.play('hint');
-    if (hintNeedsAd) {
-      setHintAdError(null);
-      setShowHintAdPrompt(true);
-      return;
+    const ok = requestHint();
+    if (!ok && hintMessage) {
+      showWrongFeedback(-1, -1, { title: '💡 Jenny says', sub: hintMessage });
     }
-    requestHint();
   };
 
   const handleWatchAdForHint = async () => {
@@ -989,6 +981,7 @@ export const GameScreen: React.FC = () => {
       return;
     }
     setShowCompletionModal(false);
+    setStarRewardClaim(null);
     setLastPlacedPuppy(null);
     setIsDragging(false);
     // Frequency-capped interstitial — resolves immediately when not due.
@@ -1001,50 +994,11 @@ export const GameScreen: React.FC = () => {
     }
   };
 
-  const boardTrayWidth = board.gridSize * cellSize + TRAY_FRAME_WIDTH;
-  // Flank the board only when the whole row fits inside the content width —
-  // on phones the side columns would clip off-screen, so they stack below.
-  const flankControls =
-    boardTrayWidth + 2 * (SIDE_CONTROLS_WIDTH + BOARD_ROW_GAP) <= screenWidth - 32;
 
-  const undoRestartButtons = (
-    <>
-      <CandyButton
-        skin="grape"
-        size="sm"
-        disabled={isGameOver || isComplete || moves === 0}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          soundManager.play('undo');
-          undo();
-        }}
-        style={styles.boardSideButton}
-        accessibilityLabel="Undo last move"
-      >
-        <Text style={styles.controlIcon}>↩️</Text>
-      </CandyButton>
-      <CandyButton
-        skin="grape"
-        size="sm"
-        disabled={isGameOver || isComplete}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          soundManager.play('button');
-          setShowRestartConfirm(true);
-        }}
-        style={styles.boardSideButton}
-        accessibilityLabel="Restart level"
-      >
-        <Text style={styles.controlIcon}>🔄</Text>
-      </CandyButton>
-    </>
-  );
 
   const hintControl = (
     <HintButton
-      tier={activeHint?.tier}
-      adGated={hintNeedsAd}
-      disabled={isGameOver || isComplete}
+      disabled={!canHint}
       onPress={handleHintPress}
     />
   );
@@ -1312,6 +1266,17 @@ export const GameScreen: React.FC = () => {
               {pawfectResult.totalScore > 0 && (
                 <Text style={styles.scoreTotal}>🏆 {pawfectResult.totalScore.toLocaleString()} total</Text>
               )}
+              {starRewardClaim && starRewardClaim.newlyClaimed.length > 0 && (
+                <View style={styles.starMilestoneRewardBox}>
+                  <Text style={styles.starMilestoneRewardTitle}>
+                    🌟 Star Milestone Reached! ({starRewardClaim.newlyClaimed.map(m => `${m.starsRequired} ⭐`).join(', ')})
+                  </Text>
+                  <Text style={styles.starMilestoneRewardSub}>
+                    🎁 +{starRewardClaim.totalNewHints} Free Hints added to your backpack!
+                    {starRewardClaim.totalNewUndos > 0 ? ` (+${starRewardClaim.totalNewUndos} Undo)` : ''}
+                  </Text>
+                </View>
+              )}
             </View>
 
             {isDailyChallenge && dailyResult && (
@@ -1332,23 +1297,7 @@ export const GameScreen: React.FC = () => {
               </View>
             )}
 
-            {shareToast && (
-              <View style={styles.shareToastBadge}>
-                <Text style={styles.shareToastBadgeText}>📋 Result Copied to Clipboard! 🐾</Text>
-              </View>
-            )}
-
             <View style={styles.modalButtonGroup}>
-              {isDailyChallenge && (
-                <CandyButton
-                  block
-                  skin="orange"
-                  label="Share Walk Result"
-                  icon={<Text style={styles.controlIcon}>📤</Text>}
-                  onPress={handleShareDaily}
-                />
-              )}
-
               {isDailyChallenge ? (
                 <CandyButton
                   block
@@ -1368,8 +1317,8 @@ export const GameScreen: React.FC = () => {
                   block
                   size="lg"
                   skin="green"
-                  label={currentLevel >= MAX_LEVEL ? 'Play Again' : 'Next Level'}
-                  icon={<Text style={styles.controlIcon}>{currentLevel >= MAX_LEVEL ? '🔄' : '➡️'}</Text>}
+                  label={currentLevel >= MAX_LEVEL ? 'Play Again 🔄' : 'Next Level 🐾'}
+                  icon={<Text style={styles.controlIcon}>{currentLevel >= MAX_LEVEL ? '🔄' : '🐾'}</Text>}
                   onPress={handleNextLevel}
                 />
               )}
@@ -1416,8 +1365,9 @@ export const GameScreen: React.FC = () => {
           <CandyButton
             skin="grape"
             size="sm"
-            label={isDailyChallenge ? 'Home' : 'Map'}
-            icon={<Text style={styles.navIcon}>⬅️</Text>}
+            accessibilityLabel={isDailyChallenge ? 'Home' : 'Map'}
+            style={styles.navSquareButton}
+            icon={<Text style={styles.navIcon}>{isDailyChallenge ? '🏠' : '🗺️'}</Text>}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               soundManager.play('button');
@@ -1458,6 +1408,7 @@ export const GameScreen: React.FC = () => {
       {/* Level header on its own centered row under the utility bar */}
       <CandyPanel
         radius={CANDY_METRICS.radiusCard}
+        gloss={false}
         style={[styles.levelHeaderPanel, isShortScreen && { marginBottom: 4 }]}
         contentStyle={styles.centerLevelGroup}
       >
@@ -1479,27 +1430,6 @@ export const GameScreen: React.FC = () => {
               {isDailyChallenge ? '🔥 Daily' : getDifficultyLabel(getLevelDifficulty(currentLevel))}
             </Text>
           </View>
-          {ruleChips.length > 0 && (
-            <TouchableOpacity
-              style={styles.ruleChipRow}
-              activeOpacity={0.75}
-              accessibilityLabel="Show the rules for this level"
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                soundManager.play('button');
-                setShowRules(true);
-              }}
-            >
-              {ruleChips.map(chip => (
-                <View key={chip.label} style={styles.ruleChip}>
-                  <Text style={styles.ruleChipText} numberOfLines={1}>{chip.emoji} {chip.label}</Text>
-                </View>
-              ))}
-              <View style={[styles.ruleChip, styles.ruleChipInfo]}>
-                <Text style={styles.ruleChipText}>ⓘ Rules</Text>
-              </View>
-            </TouchableOpacity>
-          )}
         </View>
         <Animated.View
           style={[styles.levelScoreChip, { transform: [{ scale: scoreChipScale }] }]}
@@ -1523,21 +1453,23 @@ export const GameScreen: React.FC = () => {
         ) : (
           <Animated.View style={{ transform: [{ scale: heartScaleAnim }] }}>
             <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
-              <Text style={styles.heart}>❤️</Text>
-              <Text style={styles.subStatText}>{hearts} / 3</Text>
-              {gameMode === 'normal' && mistakes < 3 && (
-                <Text style={styles.subStatHint}>
-                  {3 - mistakes} oops left
-                </Text>
-              )}
+              <View style={styles.heartsRow}>
+                {[1, 2, 3].map((num) => (
+                  <Text
+                    key={num}
+                    style={[
+                      styles.heartIcon,
+                      num > hearts && styles.heartLost,
+                    ]}
+                  >
+                    {num <= hearts ? '❤️' : '🤍'}
+                  </Text>
+                ))}
+              </View>
             </CandyPanel>
           </Animated.View>
         )}
 
-        <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
-          <Text style={styles.subStatIcon}>🎯</Text>
-          <Text style={styles.subStatText}>Moves: {moves}</Text>
-        </CandyPanel>
 
         {hintsUsed > 0 && (
           <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
@@ -1548,13 +1480,8 @@ export const GameScreen: React.FC = () => {
 
       </View>
 
-      {/* The Board flanked by Undo + Restart on the left, Hint on the right —
-          on narrow screens the controls stack in a row under the board */}
+      {/* The Board centered */}
       <View style={styles.boardRow}>
-        {flankControls && (
-          <View style={styles.boardSideControls}>{undoRestartButtons}</View>
-        )}
-
         <View style={[styles.boardContainer, isShortScreen && { marginBottom: 8 }]}>
           <Board
             board={board}
@@ -1582,29 +1509,13 @@ export const GameScreen: React.FC = () => {
             />
           ))}
         </View>
-
-        {flankControls && (
-          <View style={styles.boardSideControls}>{hintControl}</View>
-        )}
       </View>
 
-      {!flankControls && (
-        <View style={[styles.boardControlsRow, { width: Math.max(boardTrayWidth, 250) }]}>
-          <View style={styles.boardControlsRowGroup}>{undoRestartButtons}</View>
-          {hintControl}
-        </View>
-      )}
+      {/* Centered Hint button below the board */}
+      <View style={styles.boardControlsRow}>
+        {hintControl}
+      </View>
 
-      {/* Jenny's hint speech bubble */}
-      {hintBubble && (
-        <View style={styles.hintBubble}>
-          <JennyAvatar size={36} mood="friendly" />
-          <View style={styles.hintBubbleText}>
-            <Text style={styles.hintBubbleName}>Jenny says:</Text>
-            <Text style={styles.hintBubbleQuote}>{hintBubble}</Text>
-          </View>
-        </View>
-      )}
 
       {/* Input Mode Switcher Pill */}
       <CandyPanel
@@ -1660,7 +1571,13 @@ export const GameScreen: React.FC = () => {
       <AdoptionModal
         visible={!!activeMilestone}
         milestone={activeMilestone}
-        onClose={() => setActiveMilestone(null)}
+        onClose={() => {
+          setActiveMilestone(null);
+          if (queuedStamp) {
+            setQueuedStamp(null);
+            setActiveChapterStamp(queuedStamp);
+          }
+        }}
       />
 
       {/* Chapter Completion Passport Stamp Ceremony Modal */}
@@ -1776,6 +1693,18 @@ const styles = StyleSheet.create({
   heart: {
     fontSize: 18,
   },
+  heartsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  heartIcon: {
+    fontSize: 16,
+  },
+  heartLost: {
+    opacity: 0.35,
+    transform: [{ scale: 0.85 }],
+  },
   boardContainer: {
     marginBottom: 18,
   },
@@ -1795,7 +1724,7 @@ const styles = StyleSheet.create({
   boardControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignSelf: 'center',
     marginBottom: 12,
   },
@@ -2063,22 +1992,29 @@ const styles = StyleSheet.create({
     color: CANDY_TEXT.onDarkSoft,
     marginTop: 4,
   },
-  shareToastBadge: {
-    backgroundColor: '#1E8F7E',
+  starMilestoneRewardBox: {
+    marginTop: 10,
+    backgroundColor: '#FEF3C7',
     borderWidth: 1.5,
-    borderColor: '#7FE9D8',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    borderColor: '#F59E0B',
     borderRadius: 12,
-    alignSelf: 'center',
-    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
   },
-  shareToastBadgeText: {
-    color: '#FFF',
-    fontSize: 12,
+  starMilestoneRewardTitle: {
+    fontSize: 13,
     fontWeight: '800',
+    color: '#92400E',
+    textAlign: 'center',
   },
-
+  starMilestoneRewardSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B45309',
+    marginTop: 2,
+    textAlign: 'center',
+  },
   /* Game Over Modal */
   gameOverModal: {
     width: '88%',
@@ -2300,31 +2236,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1.5 },
     textShadowRadius: 2,
     zIndex: 10,
-  },
-  ruleChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    rowGap: 4,
-    columnGap: 4,
-    marginTop: 5,
-  },
-  ruleChip: {
-    backgroundColor: 'rgba(20, 10, 44, 0.45)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 237, 166, 0.45)',
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  ruleChipInfo: {
-    backgroundColor: 'rgba(255, 201, 60, 0.25)',
-    borderColor: CANDY_GOLD.base,
-  },
-  ruleChipText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: CANDY_GOLD.light,
   },
   navTitle: {
     fontSize: 22,

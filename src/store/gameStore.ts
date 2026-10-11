@@ -66,7 +66,7 @@ const DEFAULT_MECHANICS: ActiveMechanics = {
   hungryCount: 0,
 };
 
-const mechanicsFromPuzzle = (puzzle: PuzzleData): ActiveMechanics => ({
+export const mechanicsFromPuzzle = (puzzle: PuzzleData): ActiveMechanics => ({
   puppiesPerUnit: puzzle.puppiesPerUnit ?? 1,
   catCount: puzzle.cats?.length ?? 0,
   linkedCount: puzzle.regions.filter(r => r.linked).length,
@@ -161,6 +161,10 @@ interface GameStore extends Omit<GameState, 'currentLevel'> {
   mechanics: ActiveMechanics;
   /** Reload streak bonus hints from storage after a daily milestone unlocks more. */
   refreshStreakHintsCache: () => Promise<void>;
+  /** Refresh consumable hints + undos from storage. */
+  refreshConsumablesCache: () => Promise<void>;
+  /** Award consumable hints + undos directly into storage & cache. */
+  awardConsumables: (hints: number, undos: number) => Promise<void>;
 }
 
 // --- Safe-call storage wrappers ------------------------------------------------
@@ -422,9 +426,8 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       const success = engine.placePuppy(row, col);
       // Zen Mode: infinite forgiveness (hearts always refilled on wrong tap).
-      // Normal Mode: first 3 wrong moves are free heart refills; any further
-      // wrongs drain hearts and will eventually game-over.
-      const forgiven = !success && (gameMode === 'zen' || mistakes < 3);
+      // Normal Mode: wrong moves directly reduce hearts (3 hearts total).
+      const forgiven = !success && gameMode === 'zen';
       if (forgiven) engine.addHeart(1);
       let state = engine.getState();
       const newMistakes = success ? mistakes : mistakes + 1;
@@ -555,33 +558,12 @@ export const useGameStore = create<GameStore>((set, get) => {
         isComplete,
         isGameOver,
         mechanics,
-        activeHint,
         hintsUsed,
-        adFreeHints,
         consumableHints: shopHints,
       } = get();
       if (!engine || isComplete || isGameOver) return false;
       const board = engine.getState().board;
-      if (activeHint && board.cells[activeHint.cell.row][activeHint.cell.col].value === 'empty') {
-        if (activeHint.tier === 1) {
-          set({ activeHint: { ...activeHint, tier: 2 } });
-          return true;
-        }
-        const { row, col } = activeHint.cell;
-        return activeHint.value === 'puppy' ? get().placePuppy(row, col) : get().markCell(row, col);
-      }
 
-      // 3-pool gate: Free (3 + streak milestone bonus) → Shop-purchased (consumableHints, FIRST) →
-      // Ad-watched (adFreeHints, fallback). Consume pre-paid inventory before
-      // asking the player to watch a rewarded ad. If all pools run dry,
-      // return false so GameScreen can prompt a Rewarded Ad watch (grantAdFreeHint + retry).
-      //
-      // Jest test harness: bump free pool to a huge test ceiling so engine/deduction tests
-      // verify solver + engine correctness, which is what those suites actually validate;
-      // production devices keep the real gating (3 free + streaks + shop + ads).
-      //
-      // streakHintsCacheRef.current is the bootstrapped numeric value for
-      // streakBonusHintsPerLevel (initialized from storage during bootstrap, never undefined).
       const streakBonus = streakHintsCacheRef.current || 0;
       const isJest =
         typeof process !== 'undefined' &&
@@ -590,21 +572,17 @@ export const useGameStore = create<GameStore>((set, get) => {
       const effectiveFreeCap = isJest ? 1000 : FREE_HINTS_PER_LEVEL + streakBonus;
       const nextHintIndex = hintsUsed + 1;
       const freePlusShop = effectiveFreeCap + shopHints;
-      const totalPool = freePlusShop + adFreeHints;
 
-      if (nextHintIndex > totalPool) {
+      if (nextHintIndex > freePlusShop) {
         telemetry.track('hint_pool_dry', {
           hints_used: hintsUsed,
           free_cap: FREE_HINTS_PER_LEVEL,
           shop_cap: shopHints,
-          ad_cap: adFreeHints,
         });
-        // All pools exhausted: show an ad is required to replenish adFreeHints.
         return false;
       }
-      // Hint is coming from the shop pool (spent before any ad fallback):
-      // consume it now (persistent, cross-level).
-      const fromShop = nextHintIndex > FREE_HINTS_PER_LEVEL && nextHintIndex <= freePlusShop;
+      // Hint is coming from the shop/star backpack pool (spent after free level cap):
+      const fromShop = nextHintIndex > effectiveFreeCap && nextHintIndex <= freePlusShop;
       if (fromShop) {
         const next = Math.max(0, shopHints - 1);
         consumableHintsCacheRef.current = next;
@@ -640,33 +618,22 @@ export const useGameStore = create<GameStore>((set, get) => {
         deduction.technique === 'search_placement' ||
         (deduction.technique === 'deduction_chain' && deduction.eliminatedCells.length === 0);
       const cell = placement ? deduction.affectedCell : deduction.eliminatedCells[0];
+
       if (fromShop) {
-        set(prev => ({
-          activeHint: {
-            deduction,
-            cell,
-            value: placement ? 'puppy' : 'marked',
-            tier: 1,
-            explanation: explainHint(deduction, mechanics.puppiesPerUnit, board.regions),
-          },
+        set({
           hintMessage: null,
           hintsUsed: hintsUsed + 1,
           consumableHints: consumableHintsCacheRef.current,
-        }));
+        });
       } else {
         set({
-          activeHint: {
-            deduction,
-            cell,
-            value: placement ? 'puppy' : 'marked',
-            tier: 1,
-            explanation: explainHint(deduction, mechanics.puppiesPerUnit, board.regions),
-          },
           hintMessage: null,
           hintsUsed: hintsUsed + 1,
         });
       }
-      return true;
+
+      // Execute the deduction move directly on the board!
+      return placement ? get().placePuppy(cell.row, cell.col) : get().markCell(cell.row, cell.col);
     },
 
     restart: () => {
@@ -765,6 +732,28 @@ export const useGameStore = create<GameStore>((set, get) => {
       ]);
       streakHintsCacheRef.current = hints;
       if (dailyState) dailyStreakCacheRef.current = dailyState.currentStreak;
+    },
+
+    refreshConsumablesCache: async (): Promise<void> => {
+      const [hints, undos] = await Promise.all([
+        typeof storage.loadConsumableHints === 'function' ? storage.loadConsumableHints() : Promise.resolve(0),
+        typeof storage.loadConsumableUndos === 'function' ? storage.loadConsumableUndos() : Promise.resolve(0),
+      ]);
+      consumableHintsCacheRef.current = hints;
+      consumableUndosCacheRef.current = undos;
+      set({ consumableHints: hints, consumableUndos: undos });
+    },
+
+    awardConsumables: async (hints: number, undos: number): Promise<void> => {
+      const nextHints = consumableHintsCacheRef.current + Math.max(0, hints);
+      const nextUndos = consumableUndosCacheRef.current + Math.max(0, undos);
+      consumableHintsCacheRef.current = nextHints;
+      consumableUndosCacheRef.current = nextUndos;
+      await Promise.all([
+        safeSaveConsumableHints(nextHints),
+        safeSaveConsumableUndos(nextUndos),
+      ]);
+      set({ consumableHints: nextHints, consumableUndos: nextUndos });
     },
 
     /**

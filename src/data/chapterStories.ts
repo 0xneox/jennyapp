@@ -62,15 +62,15 @@ export const CHAPTER_STORIES: ChapterStory[] = [
     pages: [
       {
         chapter: 'Chapter 16 • Goldenrod Way',
-        headline: 'Magic pollen links two distant beds! 🔗',
+        headline: 'Magic pollen links two distant beds! 🦴',
         dialogue: 'Wow! Fairy pollen has connected two far-apart flower beds! They\'re TWINSIES now — one puppy covers both beds!',
         highlightColor: '#FBC02D',
-        emoji: '🔗',
+        emoji: '🦴',
       },
       {
         chapter: 'Chapter 16 • Goldenrod Way',
         headline: 'Twinsies share a puppy!',
-        dialogue: 'See the 🔗 badge? Those beds share one pup. Place a puppy in either bed and both are happy! It\'s like magic!',
+        dialogue: 'See the 🦴 badge? Those beds share one pup. Place a puppy in either bed and both are happy! It\'s like magic!',
         highlightColor: '#FBC02D',
         emoji: '👯',
       },
@@ -89,7 +89,7 @@ export const CHAPTER_STORIES: ChapterStory[] = [
     pages: [
       {
         chapter: 'Chapter 21 • Highland Heather',
-        headline: 'Two challenges at once! 😾🔗',
+        headline: 'Two challenges at once! 😾🦴',
         dialogue: 'Now we have grumpy cats AND linked beds together! The cats block cells, and the linked beds share puppies across the map!',
         highlightColor: '#7E57C2',
         emoji: '😾',
@@ -170,7 +170,7 @@ export const CHAPTER_STORIES: ChapterStory[] = [
     pages: [
       {
         chapter: 'Chapter 46 • Olympus Park',
-        headline: 'Everything at once! 👯😾🔗',
+        headline: 'Everything at once! 👯😾🦴',
         dialogue: 'The ultimate challenge! Twin puppies, grumpy cats, AND linked beds — all on a 10×10 board! 20 puppies to place perfectly!',
         highlightColor: '#283593',
         emoji: '🌟',
@@ -204,10 +204,10 @@ export const CHAPTER_STORIES: ChapterStory[] = [
       },
       {
         chapter: 'Chapter 51 • Rainbow Falls',
-        headline: 'Three linked pairs! 🔗',
-        dialogue: 'Rainbow mist links THREE pairs of beds here. Each 🔗 pair is one bed: together its two parts need 2 pups — 1 + 1, or 2 in one part.',
+        headline: 'Three linked pairs! 🦴',
+        dialogue: 'Rainbow mist links THREE pairs of beds here. Each 🦴 pair is one bed: together its two parts need 2 pups — 1 + 1, or 2 in one part.',
         highlightColor: '#00897B',
-        emoji: '🔗',
+        emoji: '🦴',
       },
       {
         chapter: 'Chapter 51 • Rainbow Falls',

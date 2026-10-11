@@ -4,8 +4,6 @@ import {
   Text,
   StyleSheet,
   Animated,
-  Share,
-  Platform,
   Dimensions,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -14,7 +12,7 @@ import { Chapter } from '../data/chapterData';
 import { PostageStamp } from './PostageStamp';
 import { Confetti } from './Confetti';
 import { CandyButton } from './candy/CandyButton';
-import { APP_NAME, CANDY_GOLD, CANDY_SURFACE, CANDY_TEXT } from '../utils/theme';
+import { CANDY_GOLD } from '../utils/theme';
 
 interface ChapterStampModalProps {
   visible: boolean;
@@ -28,8 +26,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 /**
  * Chapter Completion Stamp Award Ceremony Modal.
  * Triggered whenever the player finishes all 20 levels in a chapter.
- * Shows an authentic rubber stamp impact animation with haptic feedback,
- * confetti, and a shareable postcard!
+ * Shows an authentic rubber stamp impact animation with haptic feedback
+ * and confetti.
  */
 export const ChapterStampModal: React.FC<ChapterStampModalProps> = ({
   visible,
@@ -40,15 +38,6 @@ export const ChapterStampModal: React.FC<ChapterStampModalProps> = ({
   const cardScale = useRef(new Animated.Value(0.7)).current;
   const stampAnim = useRef(new Animated.Value(2.2)).current;
   const stampOpacity = useRef(new Animated.Value(0)).current;
-  const [copiedToast, setCopiedToast] = React.useState(false);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!visible) {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      setCopiedToast(false);
-    }
-  }, [visible]);
 
   useEffect(() => {
     if (visible && chapter) {
@@ -95,32 +84,6 @@ export const ChapterStampModal: React.FC<ChapterStampModalProps> = ({
 
   if (!visible || !chapter) return null;
 
-  const handleShare = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    soundManager.play('button');
-
-    const shareMessage = [
-      `📮 PASSPORT STAMP COLLECTED! 🐾`,
-      `I just completed Chapter ${chapter.id}: ${chapter.title}!`,
-      `Cleared all 20 puzzles (${chapter.subtitle}) in ${APP_NAME}! 🏆`,
-      `\nPlay now: Cozy Logic Star Battle Puzzles`,
-    ].join('\n');
-
-    try {
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(shareMessage);
-        setCopiedToast(true);
-        if (toastTimer.current) clearTimeout(toastTimer.current);
-        toastTimer.current = setTimeout(() => setCopiedToast(false), 2400);
-      } else {
-        await Share.share({
-          message: shareMessage,
-          title: `Passport Stamp: Chapter ${chapter.id} - ${chapter.title}`,
-        });
-      }
-    } catch {}
-  };
-
   return (
     <View style={styles.modalOverlay}>
       <Confetti visible={visible} />
@@ -136,7 +99,7 @@ export const ChapterStampModal: React.FC<ChapterStampModalProps> = ({
 
         {/* Header Tag */}
         <View style={styles.headerRibbon}>
-          <Text style={styles.headerTitle}>📮 OFFICIAL PASSPORT STAMP 📮</Text>
+          <Text style={styles.headerTitle}>OFFICIAL PASSPORT STAMP</Text>
           <Text style={styles.headerSub}>Chapter {chapter.id} Complete!</Text>
         </View>
 
@@ -178,12 +141,6 @@ export const ChapterStampModal: React.FC<ChapterStampModalProps> = ({
           </View>
         </View>
 
-        {copiedToast && (
-          <View style={styles.toast}>
-            <Text style={styles.toastText}>📋 Stamp Copied to Clipboard! 🐾</Text>
-          </View>
-        )}
-
         {/* Buttons */}
         <View style={styles.actionButtons}>
           {onNextChapter && chapter.id < 50 && (
@@ -200,14 +157,6 @@ export const ChapterStampModal: React.FC<ChapterStampModalProps> = ({
               }}
             />
           )}
-
-          <CandyButton
-            block
-            size="md"
-            skin="grape"
-            label="Share Stamp 📤"
-            onPress={handleShare}
-          />
 
           <CandyButton
             block
@@ -339,24 +288,5 @@ const styles = StyleSheet.create({
     // Y3: gap:8 — button children apply marginBottom:8 via JSX style
     marginTop: 4,
     marginBottom: 8,
-  },
-  toast: {
-    position: 'absolute',
-    bottom: 80,
-    backgroundColor: '#27AE60',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 6,
-    zIndex: 100,
-  },
-  toastText: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-    fontSize: 12,
   },
 });

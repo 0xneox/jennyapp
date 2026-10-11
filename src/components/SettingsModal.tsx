@@ -162,7 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               Normal
             </Text>
-            <Text style={[styles.settingsModeSub, isShortScreen && { fontSize: 10 }]}>First 3 oops free</Text>
+            <Text style={[styles.settingsModeSub, isShortScreen && { fontSize: 10 }]}>3 hearts per level</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

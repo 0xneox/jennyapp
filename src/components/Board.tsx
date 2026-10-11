@@ -95,7 +95,7 @@ export const Board: React.FC<BoardProps> = ({
   }, [board.cells, board.gridSize, showCatAura]);
 
   // Linked beds: regions whose cells aren't 4-connected share one puppy.
-  // Detected structurally so the 🔗 badge shows even if data forgets the flag.
+  // Detected structurally so the 🦴 badge shows even if data forgets the flag.
   const linkedRegionIds = useMemo(() => {
     const ids = new Set<number>();
     for (const region of board.regions) {

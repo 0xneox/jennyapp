@@ -29,29 +29,33 @@ beforeEach(() => {
   store().setGameMode('normal');
 });
 
-describe('Oops protection', () => {
-  it('forgives three normal mistakes, then loses hearts', () => {
+describe('Heart and mistake rules', () => {
+  it('reduces hearts on mistakes, down to 0 for game over', () => {
     store().placePuppy(0, 0);
-    for (let i = 0; i < 3; i++) {
-      expect(store().placePuppy(0, 1)).toBe(false);
-      expect(store().hearts).toBe(3);
-      expect(store().engine!.getState().hearts).toBe(3);
-      expect(store().lastMistakeForgiven).toBe(true);
-    }
-    store().placePuppy(0, 1);
+    // Mistake 1 -> 2 hearts
+    expect(store().placePuppy(0, 1)).toBe(false);
     expect(store().hearts).toBe(2);
-    expect(store().mistakes).toBe(4);
+    expect(store().engine!.getState().hearts).toBe(2);
     expect(store().lastMistakeForgiven).toBe(false);
+
+    // Mistake 2 -> 1 heart ("after losing 2 love, one love")
+    expect(store().placePuppy(0, 1)).toBe(false);
+    expect(store().hearts).toBe(1);
+    expect(store().engine!.getState().hearts).toBe(1);
+
+    // Mistake 3 -> 0 hearts, game over
+    expect(store().placePuppy(0, 1)).toBe(false);
+    expect(store().hearts).toBe(0);
+    expect(store().engine!.getState().hearts).toBe(0);
+    expect(store().isGameOver).toBe(true);
   });
 
   it.each(['zen', 'normal'] as const)('keeps %s rules', mode => {
     store().setGameMode(mode);
     store().placePuppy(0, 0);
     // Zen: every wrong tap is forgiven (hearts never drain).
-    // Normal: first 3 wrong taps are free heart refills; taps #4 and beyond
-    // start draining. So after 6 wrongs in normal we should hit 0 hearts
-    // and game-over. In Zen after 6 wrongs everything still 3 hearts.
-    const wrongTaps = mode === 'zen' ? 3 : 6;
+    // Normal: 3 wrong taps drain all 3 hearts and cause game-over.
+    const wrongTaps = 3;
     for (let i = 0; i < wrongTaps; i++) store().placePuppy(0, 1);
     if (mode === 'zen') {
       expect(store().hearts).toBe(3);
@@ -66,13 +70,12 @@ describe('Oops protection', () => {
   it('does not count taps after game over or outside the board', () => {
     store().setGameMode('normal');
     store().placePuppy(0, 0);
-    // In Normal: 3 free refills + 3 drain taps = 6 wrongs before 0 hearts.
-    for (let i = 0; i < 6; i++) store().placePuppy(0, 1);
+    // In Normal: 3 wrongs before 0 hearts.
+    for (let i = 0; i < 3; i++) store().placePuppy(0, 1);
     expect(store().placePuppy(2, 3)).toBe(false);
     expect(store().markCell(2, 3)).toBe(false);
     expect(store().requestHint()).toBe(false);
-    // First 3 wrongs were forgiven; mistakes total = 6 (all attempts count).
-    expect(store().mistakes).toBe(6);
+    expect(store().mistakes).toBe(3);
     store().restart();
     store().placePuppy(-1, 0);
     expect(store().mistakes).toBe(0);
@@ -81,11 +84,10 @@ describe('Oops protection', () => {
   it('undo does not refund mistake allowance or hearts', () => {
     store().setGameMode('normal');
     store().placePuppy(0, 0);
-    // In Normal: the first 3 wrongs are forgiven; tap #4 drains a heart.
-    // So to land at hearts === 2 we need one heart-draining tap = tap #4.
-    for (let i = 0; i < 4; i++) store().placePuppy(0, 1);
+    // In Normal: 1 wrong tap drains a heart from 3 to 2.
+    store().placePuppy(0, 1);
     store().undo();
-    expect(store().mistakes).toBe(4);
+    expect(store().mistakes).toBe(1);
     expect(store().hearts).toBe(2);
   });
 
@@ -112,22 +114,13 @@ describe('Live hints', () => {
     expect(JSON.stringify(board)).toBe(before);
   });
 
-  it('explains, reveals, and applies one cell, charging once', () => {
+  it('directly finds and applies one cell deduction, charging once', () => {
+    const beforeMoves = store().moves;
     expect(store().requestHint()).toBe(true);
-    expect(store().activeHint!.tier).toBe(1);
     expect(store().hintsUsed).toBe(1);
-    expect(store().moves).toBe(0);
-    const hint = store().activeHint!;
-    store().requestHint();
-    expect(store().activeHint!.tier).toBe(2);
-    expect(store().moves).toBe(0);
-    store().requestHint();
-    expect(store().activeHint).toBeNull();
-    expect(store().hintsUsed).toBe(1);
-    expect(store().board.cells[hint.cell.row][hint.cell.col].value).toBe(hint.value);
-    expect(store().moves).toBe(1);
+    expect(store().moves).toBe(beforeMoves + 1);
     store().undo();
-    expect(store().board.cells[hint.cell.row][hint.cell.col].value).toBe('empty');
+    expect(store().moves).toBe(beforeMoves);
     expect(store().hintsUsed).toBe(1);
   });
 

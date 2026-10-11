@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Share,
   Platform,
   ActivityIndicator,
 } from 'react-native';

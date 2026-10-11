@@ -44,10 +44,10 @@ const SCRIPTS: Record<MechanicType, MechanicScript> = {
     buttonLabel: 'Got it! Let\'s play! 🐕',
   },
   linked: {
-    emoji: '🔗',
+    emoji: '🦴',
     title: 'Twinsies Beds!',
     prompt: '👇 Tap a bed to see its twin light up:',
-    jennyLine: 'These flower beds are TWINSIES 🔗 — they share one puppy! Place a pup in either bed and both are happy!',
+    jennyLine: 'These flower beds are TWINSIES 🦴 — they share one puppy! Place a pup in either bed and both are happy!',
     successLine: 'One pup, two beds — twinsies! You\'ve got this! 🐾',
     buttonLabel: 'Got it! Let\'s play! 🐕',
   },
@@ -267,7 +267,7 @@ export const MechanicIntroTutorial: React.FC<MechanicIntroTutorialProps> = ({
                     <Text style={styles.patchEmoji}>🌸</Text>
                   )}
                 </Animated.View>
-                <Text style={styles.linkedArrow}>🔗</Text>
+                <Text style={styles.linkedArrow}>🦴</Text>
                 <Animated.View style={[styles.linkedPatch, { opacity: glowB }]}>
                   {hasTapped ? (
                     <View style={styles.linkedGlowPup}>

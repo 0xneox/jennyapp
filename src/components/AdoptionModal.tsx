@@ -2,17 +2,17 @@ import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   Animated,
-  Share,
-  Platform,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { soundManager } from '../utils/soundManager';
 import { PuppyMilestone } from '../utils/storage';
+import { getPuppyMilestoneImage } from '../utils/puppyImages';
 import { Confetti } from './Confetti';
 import { CandyButton } from './candy/CandyButton';
-import { APP_NAME, CANDY_GOLD } from '../utils/theme';
+import { CANDY_GOLD } from '../utils/theme';
 
 interface AdoptionModalProps {
   visible: boolean;
@@ -27,23 +27,6 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
 }) => {
   const scaleAnim = useRef(new Animated.Value(0.75)).current;
   const badgeBounce = useRef(new Animated.Value(1)).current;
-  const [copiedToast, setCopiedToast] = React.useState(false);
-  const copiedToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Clear pending toast auto-dismiss when the modal hides or unmounts
-  useEffect(() => {
-    if (!visible) {
-      if (copiedToastTimer.current) {
-        clearTimeout(copiedToastTimer.current);
-        copiedToastTimer.current = null;
-      }
-      setCopiedToast(false);
-    }
-  }, [visible]);
-
-  useEffect(() => () => {
-    if (copiedToastTimer.current) clearTimeout(copiedToastTimer.current);
-  }, []);
 
   useEffect(() => {
     if (visible && milestone) {
@@ -72,37 +55,7 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
 
   if (!visible || !milestone) return null;
 
-  const handleShare = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    soundManager.play('button');
-
-    const shareMessage = [
-      `🎓 OFFICIAL PUPPY CARE CERTIFICATE 🐕`,
-      `I just adopted the ${milestone.breedName}!`,
-      `Title: ${milestone.badgeTitle}`,
-      `"${milestone.quote}"`,
-      `\nPlaying ${APP_NAME}: Cozy Logic Puzzles 🐾`,
-    ].join('\n');
-
-    try {
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(shareMessage);
-        setCopiedToast(true);
-        if (copiedToastTimer.current) clearTimeout(copiedToastTimer.current);
-        copiedToastTimer.current = setTimeout(() => {
-          copiedToastTimer.current = null;
-          setCopiedToast(false);
-        }, 2400);
-      } else {
-        await Share.share({
-          message: shareMessage,
-          title: `Puppy Care Certificate: ${milestone.breedName}`,
-        });
-      }
-    } catch {
-      // Fallback
-    }
-  };
+  const puppyPhoto = getPuppyMilestoneImage(milestone);
 
   return (
     <View style={styles.modalOverlay}>
@@ -119,17 +72,16 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
           <Text style={styles.headerRibbon}>📜 OFFICIAL ADOPTION CERTIFICATE 📜</Text>
         </View>
 
-        {/* Large Puppy Avatar with Pulsing Halo */}
+        {/* Large Puppy Avatar / Breed Photo with Pulsing Halo */}
         <View style={styles.iconWrapper}>
-          <View style={[styles.haloRing, { backgroundColor: milestone.color + '22' }]} />
-          <Animated.Text
-            style={[
-              styles.puppyEmoji,
-              { transform: [{ scale: badgeBounce }] },
-            ]}
-          >
-            {milestone.icon}
-          </Animated.Text>
+          <View style={[styles.haloRing, { backgroundColor: milestone.color + '25' }]} />
+          <Animated.View style={{ transform: [{ scale: badgeBounce }] }}>
+            <Image
+              source={puppyPhoto}
+              style={[styles.puppyPhoto, { borderColor: milestone.color }]}
+              resizeMode="cover"
+            />
+          </Animated.View>
         </View>
 
         {/* Adoption Title & Badge */}
@@ -161,23 +113,8 @@ export const AdoptionModal: React.FC<AdoptionModalProps> = ({
           </View>
         )}
 
-        {/* Share Toast */}
-        {copiedToast && (
-          <View style={styles.toast}>
-            <Text style={styles.toastText}>📋 Certificate Copied to Clipboard! 🐾</Text>
-          </View>
-        )}
-
         {/* Action Buttons */}
         <View style={styles.buttonGroup}>
-          <CandyButton
-            block
-            size="lg"
-            skin="grape"
-            label="Share Certificate 📤"
-            onPress={handleShare}
-          />
-
           <CandyButton
             block
             skin="green"
@@ -240,18 +177,24 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   iconWrapper: {
-    width: 90,
-    height: 90,
+    width: 120,
+    height: 120,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
     position: 'relative',
   },
   haloRing: {
     position: 'absolute',
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  puppyPhoto: {
+    width: 104,
+    height: 104,
+    borderRadius: 24,
+    borderWidth: 3,
   },
   puppyEmoji: {
     fontSize: 54,
@@ -328,18 +271,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#E0FFF8',
     lineHeight: 16,
-  },
-  toast: {
-    backgroundColor: '#2A9D8F',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  toastText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '700',
   },
   buttonGroup: {
     width: '100%',

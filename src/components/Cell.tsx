@@ -445,7 +445,15 @@ const CellComponent: React.FC<CellProps> = ({
             )}
 
             {isLinked && (
-              <Text style={styles.linkBadge}>🔗</Text>
+              <Text
+                pointerEvents="none"
+                style={[
+                  styles.linkBadge,
+                  { fontSize: Math.max(10, faceWidth * 0.34) },
+                ]}
+              >
+                🦴
+              </Text>
             )}
 
             {/* Hungry bed: the patch's own pup count, badge on the anchor cell */}
@@ -562,10 +570,12 @@ const styles = StyleSheet.create({
   },
   linkBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    fontSize: 11,
+    top: 1,
+    right: 1,
     zIndex: 30,
+    textShadowColor: '#FFC93C',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 5,
   },
   hungryBadge: {
     position: 'absolute',

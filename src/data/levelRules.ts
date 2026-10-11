@@ -29,7 +29,7 @@ export function getRuleChips(m: RuleMechanics): RuleChip[] {
   const chips: RuleChip[] = [];
   if (m.puppiesPerUnit > 1) chips.push({ emoji: '🐾', label: `${m.puppiesPerUnit} per row` });
   if (m.catCount > 0) chips.push({ emoji: '😾', label: m.catCount === 1 ? '1 cat' : `${m.catCount} cats` });
-  if (m.linkedCount > 0) chips.push({ emoji: '🔗', label: m.linkedCount === 1 ? '1 link' : `${m.linkedCount} links` });
+  if (m.linkedCount > 0) chips.push({ emoji: '🦴', label: m.linkedCount === 1 ? '1 link' : `${m.linkedCount} links` });
   if (m.hungryCount > 0) chips.push({ emoji: '🍽️', label: 'number beds' });
   return chips;
 }
@@ -60,7 +60,7 @@ export function getLevelRules(m: RuleMechanics, hungryNeeds: number[] = []): Lev
 
   if (m.linkedCount > 0) {
     rules.push({
-      emoji: '🔗',
+      emoji: '🦴',
       title: 'Linked beds',
       body: q > 1
         ? `Two parts, one bed: ${pups(q)} in total.`

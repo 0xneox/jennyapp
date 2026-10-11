@@ -15,7 +15,9 @@ import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../store/gameStore';
 import { SettingsModal } from '../components/SettingsModal';
 import { PuppySprite } from '../components/assets/PuppySprite';
-import { getTotalStats, GameStats } from '../utils/statistics';
+import { getTotalStats, getTotalStars, GameStats } from '../utils/statistics';
+import { StarRewardsModal } from '../components/StarRewardsModal';
+import { checkAndClaimStarMilestones } from '../utils/starRewards';
 import { getChapterForLevel } from '../data/chapterData';
 import { MAX_LEVEL } from '../game/types';
 import { soundManager } from '../utils/soundManager';
@@ -54,10 +56,14 @@ export const HomeScreen: React.FC = () => {
     setActiveScreen,
     redeemStreakShopItem,
     refreshStreakHintsCache,
+    consumableHints,
+    consumableUndos,
+    awardConsumables,
   } = useGameStore();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [showSettings, setShowSettings] = useState(false);
   const [showStory, setShowStory] = useState(false);
+  const [showStarRewards, setShowStarRewards] = useState(false);
   const [storyChecked, setStoryChecked] = useState(false);
   const [stats, setStats] = useState<GameStats | null>(null);
   const [dailyState, setDailyState] = useState<DailyChallengeState | null>(null);
@@ -175,7 +181,17 @@ export const HomeScreen: React.FC = () => {
       });
 
     // Load persisted stats
-    getTotalStats().then(s => { if (!cancelled) setStats(s); }).catch(() => {});
+    getTotalStats().then(s => {
+      if (!cancelled) {
+        setStats(s);
+        const stars = getTotalStars(s);
+        checkAndClaimStarMilestones(stars).then(claimRes => {
+          if (claimRes.newlyClaimed.length > 0) {
+            awardConsumables(claimRes.totalNewHints, claimRes.totalNewUndos);
+          }
+        }).catch(() => {});
+      }
+    }).catch(() => {});
 
     // Local-only profile (nothing uploads until the player joins the leaderboard)
     getOrCreateProfile().then(p => { if (!cancelled) setProfile(p); }).catch(() => {});
@@ -235,7 +251,7 @@ export const HomeScreen: React.FC = () => {
       })()
     : '0m';
 
-  const totalStars = solvedCount;
+  const totalStars = stats ? getTotalStars(stats) : solvedCount * 3;
 
   const handleContinue = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -666,11 +682,22 @@ export const HomeScreen: React.FC = () => {
 
               {!isNarrowWidth && <View style={styles.statDivider} />}
 
-              <View style={styles.statItem}>
+              <TouchableOpacity
+                style={styles.statItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  soundManager.play('button');
+                  setShowStarRewards(true);
+                }}
+              >
                 <Text style={[styles.statEmoji, { fontSize: fs(20), marginBottom: 2 }]}>⭐</Text>
                 <Text style={[styles.statNumber, { fontSize: fs(22) }]}>{totalStars}</Text>
                 <Text style={[styles.statLabel, { fontSize: fs(11), marginTop: 2 }]}>Stars Earned</Text>
-              </View>
+                <Text style={[styles.statRewardHint, { fontSize: fs(9), color: '#D97706', marginTop: 2 }]}>
+                  Rewards 🎁
+                </Text>
+              </TouchableOpacity>
 
               {!isNarrowWidth && <View style={styles.statDivider} />}
 
@@ -706,6 +733,15 @@ export const HomeScreen: React.FC = () => {
         visible={showProfile}
         onClose={() => setShowProfile(false)}
         onSaved={setProfile}
+      />
+
+      {/* Star Milestone Rewards Modal */}
+      <StarRewardsModal
+        visible={showStarRewards}
+        totalStars={totalStars}
+        consumableHints={consumableHints}
+        consumableUndos={consumableUndos}
+        onClose={() => setShowStarRewards(false)}
       />
 
       {/* AdMob banner — collapses to nothing until ads are ready */}
@@ -986,6 +1022,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: CANDY_TEXT.onDarkMuted,
+    marginTop: 2,
+  },
+  statRewardHint: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: CANDY_GOLD.base,
     marginTop: 2,
   },
   statDivider: {

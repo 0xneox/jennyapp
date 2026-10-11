@@ -81,7 +81,7 @@ export const PostageStamp: React.FC<PostageStampProps> = ({
                 isLg && styles.stampNumberTextLg,
               ]}
             >
-              № {chapter.id}
+              No. {chapter.id}
             </Text>
             {!isSm && (
               <Text

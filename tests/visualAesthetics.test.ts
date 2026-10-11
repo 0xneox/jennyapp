@@ -161,7 +161,7 @@ describe('Sprint 3: Visual Identity & Bespoke Cozy Art System', () => {
 
     it('matches the exact inspirational motivational quote and attribution', () => {
       expect(LAUNCH_QUOTE_TEXT).toBe('“Every puzzle is a little adventure for your brain.”');
-      expect(LAUNCH_QUOTE_AUTHOR).toBe('— Jennydoku');
+      expect(LAUNCH_QUOTE_AUTHOR).toBe('— Jennydoko');
     });
   });
 });
