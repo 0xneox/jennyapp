@@ -3,7 +3,6 @@
     "name": "JennyDoko",
     "slug": "jennydoko",
     "version": "1.2.0",
-    "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "ios": {
@@ -17,8 +16,7 @@
         "foregroundImage": "./assets/logo.png",
         "backgroundImage": "./assets/logo.png",
         "monochromeImage": "./assets/logo.png"
-      },
-      "predictiveBackGestureEnabled": false
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -50,7 +48,8 @@
         {
           "android": {
             "enableMinifyInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableProguardInReleaseBuilds": true
           }
         }
       ],
@@ -60,6 +59,12 @@
           "icon": "./assets/logo.png",
           "color": "#13B0FA",
           "defaultChannel": "daily-puzzle"
+        }
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT"
         }
       ]
     ]
