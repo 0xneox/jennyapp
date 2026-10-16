@@ -2,9 +2,9 @@
   "expo": {
     "name": "JennyDoko",
     "slug": "jennydoko",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -13,10 +13,10 @@
     "android": {
       "package": "com.jennydoko.game",
       "adaptiveIcon": {
-        "backgroundColor": "#13B0FA",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#8B5A2B",
+        "foregroundImage": "./assets/logo.png",
+        "backgroundImage": "./assets/logo.png",
+        "monochromeImage": "./assets/logo.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -65,7 +65,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/android-icon-monochrome.png",
+          "icon": "./assets/logo.png",
           "color": "#13B0FA",
           "defaultChannel": "daily-puzzle"
         }

@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -57,7 +58,6 @@ export const HomeScreen: React.FC = () => {
     redeemStreakShopItem,
     refreshStreakHintsCache,
     consumableHints,
-    consumableUndos,
     awardConsumables,
   } = useGameStore();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -187,7 +187,7 @@ export const HomeScreen: React.FC = () => {
         const stars = getTotalStars(s);
         checkAndClaimStarMilestones(stars).then(claimRes => {
           if (claimRes.newlyClaimed.length > 0) {
-            awardConsumables(claimRes.totalNewHints, claimRes.totalNewUndos);
+            awardConsumables(claimRes.totalNewHints);
           }
         }).catch(() => {});
       }
@@ -414,26 +414,11 @@ export const HomeScreen: React.FC = () => {
 
           {/* Title & Branding */}
           <View style={[styles.titleContainer, { marginBottom: vGap(20) }]}>
-            <View style={styles.logoRow}>
-              <Text
-                style={[
-                  styles.logoWord,
-                  styles.logoWordJenny,
-                  { fontSize: fs(52) },
-                ]}
-              >
-                Jenny
-              </Text>
-              <Text
-                style={[
-                  styles.logoWord,
-                  styles.logoWordDoko,
-                  { fontSize: fs(52) },
-                ]}
-              >
-                Doko
-              </Text>
-            </View>
+            <Image
+              source={require('../../assets/name.png')}
+              style={[styles.nameImage, { width: fs(240) }]}
+              resizeMode="contain"
+            />
             <Text style={[styles.subtitle, { fontSize: fs(16), marginTop: vGap(4) }]}>
               {APP_TAGLINE}
             </Text>
@@ -639,9 +624,6 @@ export const HomeScreen: React.FC = () => {
                 <View style={styles.rowButtonContent}>
                   <Text style={[styles.storyButtonIcon, { fontSize: fs(22), marginRight: 12 }]}>🗺️</Text>
                   <Text style={[styles.rowButtonText, { fontSize: fs(16) }]}>Chapters & Levels</Text>
-                  <View style={styles.rowButtonBadge}>
-                    <Text style={[styles.rowButtonBadgeText, { fontSize: fs(12) }]}>{unlockedLevels} / {MAX_LEVEL}</Text>
-                  </View>
                 </View>
               </CandyButton>
             </View>
@@ -723,7 +705,7 @@ export const HomeScreen: React.FC = () => {
       <StoryComicModal
         visible={showStory}
         onClose={() => setShowStory(false)}
-        onStartGame={() => {
+        onComplete={() => {
           setShowStory(false);
           startLevel(currentLevel);
         }}
@@ -740,7 +722,6 @@ export const HomeScreen: React.FC = () => {
         visible={showStarRewards}
         totalStars={totalStars}
         consumableHints={consumableHints}
-        consumableUndos={consumableUndos}
         onClose={() => setShowStarRewards(false)}
       />
 
@@ -814,19 +795,9 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     marginBottom: 6,
   },
-  logoWord: {
-    fontSize: 52,
-    fontWeight: '900',
-    letterSpacing: 1,
-    textShadowColor: CANDY_TEXT.shadow,
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 2,
-  },
-  logoWordJenny: {
-    color: CANDY_GOLD.base,
-  },
-  logoWordDoko: {
-    color: '#7FD4FF',
+  nameImage: {
+    height: 60,
+    marginBottom: 6,
   },
   subtitle: {
     fontSize: 16,

@@ -35,6 +35,7 @@ import {
 } from './launchConstants';
 
 const JENNY_IMAGE = require('../../../assets/jennyim.png');
+const NAME_IMAGE = require('../../../assets/name.png');
 
 interface LaunchExperienceProps {
   onComplete: () => void;
@@ -135,7 +136,7 @@ export const LaunchExperience: React.FC<LaunchExperienceProps> = ({
     return () => clearTimeout(timer);
   }, [reduceMotion]);
 
-  // Phase 2: Jennydoku Loading Screen
+  // Phase 2: Jennydoko Loading Screen
   useEffect(() => {
     if (phase !== 'loading') return;
 
@@ -250,7 +251,7 @@ export const LaunchExperience: React.FC<LaunchExperienceProps> = ({
         </View>
       )}
 
-      {/* SCREEN 2: Jennydoku Loading */}
+      {/* SCREEN 2: Jennydoko Loading */}
       {phase !== 'publisher' && (
         <Animated.View style={[styles.loadingBackdrop, { opacity: loadingOpacity }]}>
           <LinearGradient
@@ -340,28 +341,16 @@ export const LaunchExperience: React.FC<LaunchExperienceProps> = ({
                 <Text style={styles.loadingLabel}>{LAUNCH_LOADING_LABEL}</Text>
               </View>
 
-              {/* Lower Portion: Official Jennydoku Logo & Tagline */}
+              {/* Lower Portion: Official Jennydoko Logo & Tagline */}
               <View style={styles.logoSection}>
-                <View style={styles.logoRow}>
-                  <Text
-                    style={[
-                      styles.logoWord,
-                      styles.logoWordJenny,
-                      { fontSize: isNarrowWidth ? 38 : isShortScreen ? 42 : 46 },
-                    ]}
-                  >
-                    Jenny
-                  </Text>
-                  <Text
-                    style={[
-                      styles.logoWord,
-                      styles.logoWordDoku,
-                      { fontSize: isNarrowWidth ? 38 : isShortScreen ? 42 : 46 },
-                    ]}
-                  >
-                    doku
-                  </Text>
-                </View>
+                <Image
+                  source={NAME_IMAGE}
+                  style={[
+                    styles.nameImage,
+                    { width: isNarrowWidth ? 200 : isShortScreen ? 220 : 240 },
+                  ]}
+                  resizeMode="contain"
+                />
                 <Text
                   style={[
                     styles.tagline,
@@ -423,7 +412,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
 
-  /* Screen 2: Jennydoku Loading */
+  /* Screen 2: Jennydoko Loading */
   loadingBackdrop: {
     flex: 1,
   },
@@ -535,28 +524,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  /* Lower Portion: Jennydoku Logo */
+  /* Lower Portion: Jennydoko Logo */
   logoSection: {
     alignItems: 'center',
     marginBottom: 8,
   },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+  nameImage: {
+    height: 60,
     marginBottom: 4,
-  },
-  logoWord: {
-    fontWeight: '900',
-    letterSpacing: 1,
-    textShadowColor: CANDY_TEXT.shadow,
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 3,
-  },
-  logoWordJenny: {
-    color: CANDY_GOLD.base,
-  },
-  logoWordDoku: {
-    color: '#7FD4FF',
   },
   tagline: {
     fontWeight: '700',

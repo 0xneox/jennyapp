@@ -32,6 +32,7 @@ import { PuppySprite } from '../components/assets/PuppySprite';
 
 const PAW_IMAGE = require('../../assets/paw.png');
 const JENNY_PUPPY_IMAGE = require('../../assets/jennyim.png');
+const HOME_ICON_IMAGE = require('../../assets/homeicon.png');
 
 // Chapters whose intro story teaches a brand-new mechanic (see chapterStories.ts).
 // On these chapters the 3-page story is shown INSTEAD of the interactive
@@ -65,7 +66,8 @@ import { getChapterForLevel, Chapter } from '../data/chapterData';
 import { MAX_LEVEL } from '../game/types';
 import { getChapterStory, CHAPTERS_WITH_STORIES, ChapterStory } from '../data/chapterStories';
 import { JennyAvatar, JennyMood } from '../components/assets/JennyAvatar';
-import { InteractiveTutorial } from '../components/InteractiveTutorial';
+import { InteractiveTutorial, InteractiveTutorialHandle } from '../components/InteractiveTutorial';
+import { TutorialStep } from '../utils/tutorialBoard';
 import { LevelRulesModal } from '../components/LevelRulesModal';
 import { JENNY_CHEERS } from '../data/storyLore';
 import {
@@ -144,6 +146,8 @@ export const GameScreen: React.FC = () => {
 
   const [cellSize, setCellSize] = useState<number>(() => calcCellSize(board.gridSize));
   const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState<TutorialStep>(1);
+  const tutorialRef = useRef<InteractiveTutorialHandle>(null);
   const [showRules, setShowRules] = useState(false);
   const [lastTap, setLastTap] = useState<{ row: number; col: number; time: number } | null>(null);
   const [lastPlacedPuppy, setLastPlacedPuppy] = useState<{ row: number; col: number } | null>(null);
@@ -307,6 +311,7 @@ export const GameScreen: React.FC = () => {
   const screenSlideAnim = useRef(new Animated.Value(12)).current;
   const heartScaleAnim = useRef(new Animated.Value(1)).current;
   const toastFadeAnim = useRef(new Animated.Value(0)).current;
+  const hintFadeAnim = useRef(new Animated.Value(0)).current;
   const completionScaleAnim = useRef(new Animated.Value(0.85)).current;
   const shimmerAnim = useRef(new Animated.Value(0.3)).current;
   const prevHearts = useRef(hearts);
@@ -381,6 +386,7 @@ export const GameScreen: React.FC = () => {
     // when a new mechanic first appears. Both check persistent storage so they
     // only fire once per device.
     setShowTutorial(false);
+    setTutorialStep(1);
     setActiveMechanicIntro(null);
     setActiveChapterStory(null);
 
@@ -397,7 +403,10 @@ export const GameScreen: React.FC = () => {
 
     if (currentLevel === 1) {
       getTutorialSeen().then(seen => {
-        if (!seen && isMountedRef.current) setShowTutorial(true);
+        if (!seen && isMountedRef.current) {
+          setTutorialStep(1);
+          setShowTutorial(true);
+        }
       }).catch(() => {});
     } else {
       // Chapter intro story + new-mechanic intro tutorial. On debut chapters
@@ -518,29 +527,42 @@ export const GameScreen: React.FC = () => {
     prevHearts.current = hearts;
   }, [hearts, heartScaleAnim]);
 
-  // Hint message notification — non-displacing toast if deduction stalled
+  // Hint speech bubble — Jenny explains the rule in text so user learns rules
   useEffect(() => {
-    if (hintMessage) {
-      setWrongMoveToast({ title: '💡 Jenny says', sub: hintMessage });
-      toastFadeAnim.setValue(0);
-      Animated.timing(toastFadeAnim, {
+    if (hintBubbleTimer.current) {
+      clearTimeout(hintBubbleTimer.current);
+      hintBubbleTimer.current = null;
+    }
+    const msg = activeHint?.explanation || hintMessage;
+    if (msg) {
+      setHintBubble(msg);
+      hintFadeAnim.setValue(0);
+      Animated.timing(hintFadeAnim, {
         toValue: 1,
-        duration: 150,
+        duration: 220,
         useNativeDriver: true,
       }).start();
-      if (wrongToastTimer.current) clearTimeout(wrongToastTimer.current);
-      wrongToastTimer.current = setTimeout(() => {
-        wrongToastTimer.current = null;
-        Animated.timing(toastFadeAnim, {
+
+      hintBubbleTimer.current = setTimeout(() => {
+        hintBubbleTimer.current = null;
+        Animated.timing(hintFadeAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 250,
           useNativeDriver: true,
         }).start(() => {
-          if (isMountedRef.current) setWrongMoveToast(null);
+          if (isMountedRef.current) setHintBubble(null);
         });
-      }, 3500);
+      }, 7000);
+    } else {
+      Animated.timing(hintFadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        if (isMountedRef.current) setHintBubble(null);
+      });
     }
-  }, [hintMessage, toastFadeAnim]);
+  }, [activeHint, hintMessage, hintFadeAnim]);
 
   // Completion sequence
   useEffect(() => {
@@ -587,7 +609,7 @@ export const GameScreen: React.FC = () => {
             const starCheck = await checkAndClaimStarMilestones(result.totalStars).catch(() => null);
             if (starCheck && starCheck.newlyClaimed.length > 0 && !cancelled) {
               setStarRewardClaim(starCheck);
-              awardConsumables(starCheck.totalNewHints, starCheck.totalNewUndos).catch(() => {});
+              awardConsumables(starCheck.totalNewHints).catch(() => {});
             }
           }
         })
@@ -910,7 +932,8 @@ export const GameScreen: React.FC = () => {
 
   const handleMarkCell = (row: number, col: number) => {
     if (isGameOver || isComplete) return;
-    if (inputMode === 'mark') {
+    // During tutorial, bypass input mode check
+    if (inputMode === 'mark' || showTutorial) {
       markCell(row, col);
     }
   };
@@ -945,10 +968,7 @@ export const GameScreen: React.FC = () => {
     if (!canHint) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     soundManager.play('hint');
-    const ok = requestHint();
-    if (!ok && hintMessage) {
-      showWrongFeedback(-1, -1, { title: '💡 Jenny says', sub: hintMessage });
-    }
+    requestHint();
   };
 
   const handleWatchAdForHint = async () => {
@@ -968,6 +988,7 @@ export const GameScreen: React.FC = () => {
 
   const handleTutorialClose = () => {
     setShowTutorial(false);
+    setTutorialStep(1);
     setTutorialSeen(true);
   };
 
@@ -1015,6 +1036,7 @@ export const GameScreen: React.FC = () => {
     >
       <CandyBackground
         level={currentLevel}
+        isTutorial={showTutorial}
         style={[styles.container, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 12) }]}
       >
       {!isReady ? (
@@ -1031,18 +1053,17 @@ export const GameScreen: React.FC = () => {
         title={isDailyChallenge ? 'Daily Walk' : `Level ${currentLevel}`}
         mechanics={mechanics}
         hungryNeeds={hungryNeeds}
-        onOpenBasics={() => {
-          setShowRules(false);
-          setShowTutorial(true);
-        }}
+        level={currentLevel}
       />
 
-      {/* Interactive 3-Rule Spotlight Tutorial */}
+      {/* Interactive spotlight tutorial */}
       <InteractiveTutorial
+        ref={tutorialRef}
         visible={showTutorial}
         onClose={handleTutorialClose}
         onPlacePuppy={(row, col) => placePuppy(row, col)}
         onMarkCell={(row, col) => markCell(row, col)}
+        onStepChange={setTutorialStep}
       />
 
       {/* Mechanic Intro Tutorial (cats, linked, twin) */}
@@ -1273,7 +1294,6 @@ export const GameScreen: React.FC = () => {
                   </Text>
                   <Text style={styles.starMilestoneRewardSub}>
                     🎁 +{starRewardClaim.totalNewHints} Free Hints added to your backpack!
-                    {starRewardClaim.totalNewUndos > 0 ? ` (+${starRewardClaim.totalNewUndos} Undo)` : ''}
                   </Text>
                 </View>
               )}
@@ -1359,126 +1379,168 @@ export const GameScreen: React.FC = () => {
         }}
       />
 
-      {/* Upper utility bar — nav buttons pinned to the top edge */}
-      <View style={[styles.topNavBar, isShortScreen && { marginBottom: 4 }]}>
-        <View style={styles.topNavSide}>
-          <CandyButton
-            skin="grape"
-            size="sm"
-            accessibilityLabel={isDailyChallenge ? 'Home' : 'Map'}
-            style={styles.navSquareButton}
-            icon={<Text style={styles.navIcon}>{isDailyChallenge ? '🏠' : '🗺️'}</Text>}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              soundManager.play('button');
-              setActiveScreen(isDailyChallenge ? 'home' : 'map');
-            }}
-          />
-        </View>
-
-        <View style={[styles.topNavSide, styles.topNavSideRight]}>
-          <View style={styles.rightNavActions}>
+      {/* Upper utility bar — nav buttons pinned to the top edge (hidden during demo tutorial) */}
+      {!showTutorial && (
+        <View style={[styles.topNavBar, isShortScreen && { marginBottom: 4 }]}>
+          <View style={styles.topNavSide}>
             <CandyButton
               skin="grape"
               size="sm"
+              accessibilityLabel={isDailyChallenge ? 'Home' : 'Map'}
+              style={styles.navSquareButton}
+              icon={<Image source={HOME_ICON_IMAGE} style={styles.homeIcon} resizeMode="contain" />}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 soundManager.play('button');
-                setShowRules(true);
+                setActiveScreen(isDailyChallenge ? 'home' : 'map');
               }}
-              style={styles.navSquareButton}
-            >
-              <Text style={styles.navIcon}>❓</Text>
-            </CandyButton>
-            <CandyButton
-              skin="grape"
-              size="sm"
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowSettingsModal(true);
-              }}
-              style={styles.navSquareButton}
-            >
-              <Text style={styles.navIcon}>⚙️</Text>
-            </CandyButton>
+            />
           </View>
-        </View>
-      </View>
 
-      {/* Level header on its own centered row under the utility bar */}
-      <CandyPanel
-        radius={CANDY_METRICS.radiusCard}
-        gloss={false}
-        style={[styles.levelHeaderPanel, isShortScreen && { marginBottom: 4 }]}
-        contentStyle={styles.centerLevelGroup}
-      >
-        <View style={styles.centerLevelInfo}>
-          <Text style={styles.navTitle}>
-            {isDailyChallenge ? 'Daily Walk' : `Level ${currentLevel}`}
-          </Text>
-          <View
-            style={[
-              styles.difficultyBadgeHeader,
-              {
-                backgroundColor: isDailyChallenge
-                  ? '#E65100'
-                  : getDifficultyColor(getLevelDifficulty(currentLevel)),
-              },
-            ]}
-          >
-            <Text style={styles.difficultyBadgeHeaderText}>
-              {isDailyChallenge ? '🔥 Daily' : getDifficultyLabel(getLevelDifficulty(currentLevel))}
-            </Text>
+          <View style={[styles.topNavSide, styles.topNavSideRight]}>
+            <View style={styles.rightNavActions}>
+              <CandyButton
+                skin="grape"
+                size="sm"
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  soundManager.play('button');
+                  setShowRules(true);
+                }}
+                style={styles.navSquareButton}
+              >
+                <Text style={styles.navIcon}>❓</Text>
+              </CandyButton>
+              <CandyButton
+                skin="grape"
+                size="sm"
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowSettingsModal(true);
+                }}
+                style={styles.navSquareButton}
+              >
+                <Text style={styles.navIcon}>⚙️</Text>
+              </CandyButton>
+            </View>
           </View>
         </View>
-        <Animated.View
-          style={[styles.levelScoreChip, { transform: [{ scale: scoreChipScale }] }]}
+      )}
+
+      {/* Level header on its own centered row under the utility bar (hidden during tutorial so Jenny's dialogue box takes focus) */}
+      {!showTutorial && (
+        <CandyPanel
+          radius={CANDY_METRICS.radiusCard}
+          gloss={false}
+          style={[styles.levelHeaderPanel, isShortScreen && { marginBottom: 4 }]}
+          contentStyle={styles.centerLevelGroup}
         >
-          <Text style={styles.levelScoreText}>🏆 {displayScore.toLocaleString()}</Text>
-        </Animated.View>
-      </CandyPanel>
+          <View style={styles.centerLevelInfo}>
+            <Text style={styles.navTitle}>
+              {isDailyChallenge ? 'Daily Walk' : `Level ${currentLevel}`}
+            </Text>
+            <View
+              style={[
+                styles.difficultyBadgeHeader,
+                {
+                  backgroundColor: isDailyChallenge
+                    ? '#E65100'
+                    : getDifficultyColor(getLevelDifficulty(currentLevel)),
+                },
+              ]}
+            >
+              <Text style={styles.difficultyBadgeHeaderText}>
+                {isDailyChallenge ? '🔥 Daily' : getDifficultyLabel(getLevelDifficulty(currentLevel))}
+              </Text>
+            </View>
+          </View>
+          <Animated.View
+            style={[styles.levelScoreChip, { transform: [{ scale: scoreChipScale }] }]}
+          >
+            <Text style={styles.levelScoreText}>🏆 {displayScore.toLocaleString()}</Text>
+          </Animated.View>
+        </CandyPanel>
+      )}
 
       {/* Stats, board and controls stay vertically centered in the leftover space */}
       <View style={styles.gameColumn}>
 
-      {/* Sub-Header Stats Bar */}
-      <View style={[styles.subStatsBar, isShortScreen && { marginBottom: 6 }]}>
-        {gameMode === 'zen' ? (
-          <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
-            <Text style={styles.subStatIcon}>🧘</Text>
-            <Text style={styles.subStatText}>
-              Zen {mistakes > 0 ? `(${mistakes} err)` : ''}
-            </Text>
-          </CandyPanel>
-        ) : (
-          <Animated.View style={{ transform: [{ scale: heartScaleAnim }] }}>
+      {/* Sub-Header Stats Bar (hidden during tutorial) */}
+      {!showTutorial && (
+        <View style={[styles.subStatsBar, isShortScreen && { marginBottom: 6 }]}>
+          {gameMode === 'zen' ? (
             <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
-              <View style={styles.heartsRow}>
-                {[1, 2, 3].map((num) => (
-                  <Text
-                    key={num}
-                    style={[
-                      styles.heartIcon,
-                      num > hearts && styles.heartLost,
-                    ]}
-                  >
-                    {num <= hearts ? '❤️' : '🤍'}
-                  </Text>
-                ))}
-              </View>
+              <Text style={styles.subStatIcon}>🧘</Text>
+              <Text style={styles.subStatText}>
+                Zen {mistakes > 0 ? `(${mistakes} err)` : ''}
+              </Text>
             </CandyPanel>
-          </Animated.View>
-        )}
+          ) : (
+            <Animated.View style={{ transform: [{ scale: heartScaleAnim }] }}>
+              <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
+                <View style={styles.heartsRow}>
+                  {[1, 2, 3].map((num) => (
+                    <Text
+                      key={num}
+                      style={[
+                        styles.heartIcon,
+                        num > hearts && styles.heartLost,
+                      ]}
+                    >
+                      {num <= hearts ? '❤️' : '🤍'}
+                    </Text>
+                  ))}
+                </View>
+              </CandyPanel>
+            </Animated.View>
+          )}
 
 
-        {hintsUsed > 0 && (
-          <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
-            <Text style={styles.subStatIcon}>💡</Text>
-            <Text style={styles.subStatText}>{hintsUsed}</Text>
-          </CandyPanel>
-        )}
+          {hintsUsed > 0 && (
+            <CandyPanel variant="well" radius={CANDY_METRICS.radiusChip} contentStyle={styles.subStatItem}>
+              <Text style={styles.subStatIcon}>💡</Text>
+              <Text style={styles.subStatText}>{hintsUsed}</Text>
+            </CandyPanel>
+          )}
 
-      </View>
+        </View>
+      )}
+
+      {/* Jenny's Hint Rule Dialogue — transparent speech bubble just above the puzzle */}
+      {hintBubble && !isComplete && (
+        <Animated.View
+          style={[
+            styles.hintBubbleContainer,
+            isShortScreen && { marginBottom: 4 },
+            { opacity: hintFadeAnim },
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              Animated.timing(hintFadeAnim, {
+                toValue: 0,
+                duration: 150,
+                useNativeDriver: true,
+              }).start(() => {
+                if (isMountedRef.current) setHintBubble(null);
+              });
+            }}
+            style={[styles.hintBubble, isShortScreen && { paddingVertical: 6 }]}
+            accessibilityLabel={`Hint: ${hintBubble}. Tap to dismiss.`}
+          >
+            <JennyAvatar size={34} mood="friendly" />
+            <View style={styles.hintBubbleText}>
+              <View style={styles.hintBubbleHeaderRow}>
+                <Text style={styles.hintBubbleName}>💡 Jenny says</Text>
+                <Text style={styles.hintBubbleDismiss}>✕</Text>
+              </View>
+              <Text style={styles.hintBubbleQuote}>{hintBubble}</Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* The Board centered */}
       <View style={styles.boardRow}>
@@ -1497,6 +1559,27 @@ export const GameScreen: React.FC = () => {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             level={currentLevel}
+            onTutorialCellTap={() => {
+              const currentStep = tutorialRef.current?.getCurrentStep?.();
+              if (currentStep === 1) {
+                tutorialRef.current?.advanceFromStep1();
+              } else if (currentStep === 2) {
+                tutorialRef.current?.advanceFromStep2?.();
+              } else if (currentStep === 3) {
+                tutorialRef.current?.advanceFromStep3?.();
+              } else if (currentStep === 4) {
+                tutorialRef.current?.advanceFromStep4?.();
+              } else if (currentStep === 5) {
+                tutorialRef.current?.advanceFromStep5?.();
+              } else if (currentStep === 6) {
+                tutorialRef.current?.advanceFromStep6?.();
+              } else if (currentStep === 7) {
+                tutorialRef.current?.advanceFromStep7?.();
+              } else if (currentStep === 8) {
+                tutorialRef.current?.advanceFromStep8?.();
+              }
+            }}
+            tutorialStep={showTutorial ? tutorialStep : undefined}
           />
           {scorePops.map(pop => (
             <ScorePop
@@ -1511,59 +1594,63 @@ export const GameScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Centered Hint button below the board */}
-      <View style={styles.boardControlsRow}>
-        {hintControl}
-      </View>
+      {/* Centered Hint button below the board (hidden during tutorial) */}
+      {!showTutorial && (
+        <View style={styles.boardControlsRow}>
+          {hintControl}
+        </View>
+      )}
 
 
-      {/* Input Mode Switcher Pill */}
-      <CandyPanel
-        variant="well"
-        radius={CANDY_METRICS.radiusPill}
-        contentStyle={styles.modeSwitcherContainer}
-        style={[styles.modeSwitcherWrap, isShortScreen && { marginTop: 6, marginBottom: 4 }]}
-      >
-        <TouchableOpacity
-          style={[
-            styles.modePillButton,
-            inputMode === 'puppy' && styles.activePuppyPill,
-          ]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setInputMode('puppy');
-            setLastTap(null);
-          }}
-          activeOpacity={0.8}
+      {/* Input Mode Switcher Pill (hidden during tutorial) */}
+      {!showTutorial && (
+        <CandyPanel
+          variant="well"
+          radius={CANDY_METRICS.radiusPill}
+          contentStyle={styles.modeSwitcherContainer}
+          style={[styles.modeSwitcherWrap, isShortScreen && { marginTop: 6, marginBottom: 4 }]}
         >
-          <View style={styles.modePillContent}>
-            <PuppySprite size={22} breed="corgi" />
-            <Text style={[styles.modePillText, inputMode === 'puppy' && styles.activeModePillText]}>
-              Puppy
-            </Text>
-          </View>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.modePillButton,
+              inputMode === 'puppy' && styles.activePuppyPill,
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setInputMode('puppy');
+              setLastTap(null);
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.modePillContent}>
+              <PuppySprite size={22} breed="corgi" />
+              <Text style={[styles.modePillText, inputMode === 'puppy' && styles.activeModePillText]}>
+                Puppy
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.modePillButton,
-            inputMode === 'mark' && styles.activeMarkPill,
-          ]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setInputMode('mark');
-            setLastTap(null);
-          }}
-          activeOpacity={0.8}
-        >
-          <View style={styles.modePillContent}>
-            <Image source={PAW_IMAGE} style={styles.modePillPaw} resizeMode="contain" />
-            <Text style={[styles.modePillText, inputMode === 'mark' && styles.activeModePillText]}>
-              Paw Mark
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </CandyPanel>
+          <TouchableOpacity
+            style={[
+              styles.modePillButton,
+              inputMode === 'mark' && styles.activeMarkPill,
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setInputMode('mark');
+              setLastTap(null);
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.modePillContent}>
+              <Image source={PAW_IMAGE} style={styles.modePillPaw} resizeMode="contain" />
+              <Text style={[styles.modePillText, inputMode === 'mark' && styles.activeModePillText]}>
+                Paw Mark
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </CandyPanel>
+      )}
 
       </View>
 
@@ -1744,32 +1831,50 @@ const styles = StyleSheet.create({
     color: CANDY_TEXT.onDarkSoft,
     marginLeft: 4,
   },
+  hintBubbleContainer: {
+    width: '100%',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+    zIndex: 20,
+  },
   hintBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(33, 18, 66, 0.92)',
-    borderColor: CANDY_GOLD.base,
+    backgroundColor: 'rgba(24, 12, 48, 0.65)',
+    borderColor: 'rgba(255, 201, 60, 0.75)',
     borderWidth: 1.5,
     borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginHorizontal: 16,
-    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     gap: 10,
+    width: '100%',
+    maxWidth: 420,
     shadowColor: '#150A2E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
   },
   hintBubbleText: {
     flex: 1,
+  },
+  hintBubbleHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
   },
   hintBubbleName: {
     fontSize: 11,
     fontWeight: '900',
     color: CANDY_GOLD.light,
-    marginBottom: 2,
+  },
+  hintBubbleDismiss: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.6)',
+    paddingHorizontal: 4,
   },
   hintBubbleQuote: {
     fontSize: 13,
@@ -2200,6 +2305,10 @@ const styles = StyleSheet.create({
   },
   navIcon: {
     fontSize: 15,
+  },
+  homeIcon: {
+    width: 20,
+    height: 20,
   },
   centerLevelInfo: {
     alignItems: 'center',

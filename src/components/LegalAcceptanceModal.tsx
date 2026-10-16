@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Linking,
   Modal,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -14,6 +15,8 @@ import { CandyButton } from './candy/CandyButton';
 import { CANDY_TEXT } from '../utils/theme';
 import { soundManager } from '../utils/soundManager';
 import { telemetry } from '../utils/telemetry';
+
+const NAME_IMAGE = require('../../assets/name.png');
 
 export const TERMS_URL = 'https://www.jennydoko.fun/terms';
 export const PRIVACY_URL = 'https://www.jennydoko.fun/privacy';
@@ -75,7 +78,11 @@ export const LegalAcceptanceModal: React.FC<LegalAcceptanceModalProps> = ({
         <CandyPanel style={styles.modal} contentStyle={styles.modalFace}>
           <View style={styles.innerColumn}>
             <View style={styles.header}>
-              <Text style={styles.title}>JennyDoko</Text>
+              <Image
+                source={NAME_IMAGE}
+                style={styles.titleImage}
+                resizeMode="contain"
+              />
             </View>
 
             <View style={styles.messageBox}>
@@ -173,11 +180,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 18,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: CANDY_TEXT.onDark,
-    letterSpacing: 0.3,
+  titleImage: {
+    width: 200,
+    height: 50,
   },
   messageBox: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',

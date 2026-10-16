@@ -13,8 +13,8 @@ interface LevelRulesModalProps {
   title: string;
   mechanics: RuleMechanics;
   hungryNeeds: number[];
-  /** Opens the original interactive 3-rule tutorial. */
-  onOpenBasics?: () => void;
+  /** The current level number (used for beginner-specific rules). */
+  level: number;
 }
 
 const tap = () => {
@@ -28,9 +28,9 @@ export const LevelRulesModal: React.FC<LevelRulesModalProps> = ({
   title,
   mechanics,
   hungryNeeds,
-  onOpenBasics,
+  level,
 }) => {
-  const rules = useMemo(() => getLevelRules(mechanics, hungryNeeds), [mechanics, hungryNeeds]);
+  const rules = useMemo(() => getLevelRules(mechanics, hungryNeeds, level), [mechanics, hungryNeeds, level]);
   if (!visible) return null;
 
   return (
@@ -41,9 +41,6 @@ export const LevelRulesModal: React.FC<LevelRulesModalProps> = ({
             <Text style={styles.kicker}>How to Play</Text>
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
           </View>
-          <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} onPress={() => { tap(); onClose(); }}>
-            <Text style={styles.close}>✕</Text>
-          </TouchableOpacity>
         </View>
 
         {/* flexShrink lets the list shrink to the card's maxHeight and scroll */}
@@ -60,11 +57,6 @@ export const LevelRulesModal: React.FC<LevelRulesModalProps> = ({
         </ScrollView>
 
         <CandyButton block size="md" skin="green" label="Got it!" onPress={() => { tap(); onClose(); }} style={{ marginTop: 10 }} />
-        {onOpenBasics && (
-          <TouchableOpacity onPress={() => { tap(); onOpenBasics(); }} style={{ marginTop: 12, alignSelf: 'center' }}>
-            <Text style={styles.basics}>▶ Replay the beginner tutorial</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
@@ -94,7 +86,6 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 0, flexShrink: 1 },
   kicker: { fontSize: 12, fontWeight: '900', color: '#7C3FD6', textTransform: 'uppercase', letterSpacing: 0.6 },
   title: { fontSize: 20, fontWeight: '900', color: '#3A2465' },
-  close: { fontSize: 18, color: '#6F5E8E', fontWeight: '800', paddingHorizontal: 6 },
   rule: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -107,5 +98,4 @@ const styles = StyleSheet.create({
   ruleEmoji: { fontSize: 20, marginRight: 10 },
   ruleTitle: { fontSize: 14, fontWeight: '900', color: '#3A2465' },
   ruleBody: { fontSize: 12, color: '#5B4A7E', marginTop: 2, lineHeight: 17 },
-  basics: { fontSize: 13, fontWeight: '800', color: '#7C3FD6' },
 });

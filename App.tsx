@@ -132,14 +132,16 @@ export default function App() {
             isInitReady={isInitReady}
           />
         )}
-        <Animated.View style={[styles.screenContainer, { opacity: fadeAnim }]}>
-          <ErrorBoundary>
-            {renderedScreen === 'home' && <HomeScreen />}
-            {renderedScreen === 'map' && <WorldMapScreen />}
-            {renderedScreen === 'game' && <GameScreen />}
-            {renderedScreen === 'leaderboard' && <LeaderboardScreen />}
-          </ErrorBoundary>
-        </Animated.View>
+        {isAppLoaded && (
+          <Animated.View style={[styles.screenContainer, { opacity: fadeAnim }]}>
+            <ErrorBoundary>
+              {renderedScreen === 'home' && <HomeScreen />}
+              {renderedScreen === 'map' && <WorldMapScreen />}
+              {renderedScreen === 'game' && <GameScreen />}
+              {renderedScreen === 'leaderboard' && <LeaderboardScreen />}
+            </ErrorBoundary>
+          </Animated.View>
+        )}
         <StatusBar style="light" />
         {/* One-time first-launch gate. Rendered OUTSIDE the fade anim so the
              modal never flashes in/out during a screen transition. Absolute
