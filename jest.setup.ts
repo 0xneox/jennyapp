@@ -3,3 +3,13 @@
 // behind `if (__DEV__)`; mirror the dev build here so those logs still fire
 // during tests (and so the guard never throws a ReferenceError).
 (global as any).__DEV__ = true;
+
+jest.mock('react-native', () => ({
+  Platform: {
+    OS: 'android',
+    select: (obj: any) => obj?.android ?? obj?.default,
+  },
+  Alert: {
+    alert: jest.fn(),
+  },
+}));

@@ -84,8 +84,8 @@ describe('Game Feedback Tests', () => {
     });
   });
 
-  describe('Game Modes: Zen Mode vs Challenge Mode (Sprint 1)', () => {
-    const isGameOverCheck = (mode: 'zen' | 'challenge', hearts: number) => mode === 'challenge' && hearts <= 0;
+  describe('Game Modes: Zen Mode vs Normal Mode', () => {
+    const isGameOverCheck = (mode: 'zen' | 'normal', hearts: number) => mode === 'normal' && hearts <= 0;
 
     it('Zen Mode defaults to infinite chances and tracks mistakes without game over', () => {
       const engine = new GameEngine(level1);
@@ -103,17 +103,17 @@ describe('Game Feedback Tests', () => {
       expect(mistakes).toBe(1);
     });
 
-    it('Challenge Mode triggers game over when hearts reach 0', () => {
+    it('Normal Mode triggers game over when hearts reach 0 after forgiveness exhausted', () => {
       const engine = new GameEngine(level1);
       engine.placePuppy(0, 0);
 
-      // Make 3 invalid placements
-      engine.placePuppy(0, 1);
-      engine.placePuppy(0, 1);
-      engine.placePuppy(0, 1);
+      // Normal mode forgives the first 3 wrong moves (hearts stay at 3)
+      // Starting with the 4th wrong tap, hearts begin to drain.
+      // Total of 6 wrong taps → hearts = 0.
+      for (let i = 0; i < 6; i++) engine.placePuppy(0, 1);
 
       expect(engine.getState().hearts).toBe(0);
-      const isGameOver = isGameOverCheck('challenge', engine.getState().hearts);
+      const isGameOver = isGameOverCheck('normal', engine.getState().hearts);
       expect(isGameOver).toBe(true);
     });
   });

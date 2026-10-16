@@ -36,7 +36,7 @@ const PawPrint: React.FC<{ color: string; size?: number }> = ({ color, size = 16
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       {/* 4 Toe pads */}
-      <View style={{ flexDirection: 'row', gap: 1.5, marginBottom: 1 }}>
+      <View style={{ flexDirection: 'row', marginBottom: 1 }}>
         <View
           style={{
             width: toeSize * 0.9,
@@ -44,6 +44,7 @@ const PawPrint: React.FC<{ color: string; size?: number }> = ({ color, size = 16
             borderRadius: toeSize / 2,
             backgroundColor: color,
             transform: [{ rotate: '-20deg' }],
+            marginRight: 1.5,
           }}
         />
         <View
@@ -53,6 +54,7 @@ const PawPrint: React.FC<{ color: string; size?: number }> = ({ color, size = 16
             borderRadius: toeSize / 2,
             backgroundColor: color,
             marginTop: -2,
+            marginRight: 1.5,
           }}
         />
         <View
@@ -62,6 +64,7 @@ const PawPrint: React.FC<{ color: string; size?: number }> = ({ color, size = 16
             borderRadius: toeSize / 2,
             backgroundColor: color,
             marginTop: -2,
+            marginRight: 1.5,
           }}
         />
         <View

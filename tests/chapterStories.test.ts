@@ -74,8 +74,14 @@ const resetStore = () => {
 };
 
 describe('Chapter Story Data', () => {
-  it('has stories for all 6 mechanic debut chapters', () => {
-    expect(CHAPTER_STORIES.length).toBe(6);
+  it('has stories for all 9 mechanic debut chapters', () => {
+    expect(CHAPTER_STORIES.length).toBe(9);
+  });
+
+  it('encore chapters 51/52/56 introduce the encore, hungry beds, and 3/1 beds', () => {
+    expect(getChapterStory(51)!.title).toContain('Encore');
+    expect(getChapterStory(52)!.title).toContain('Hungry Beds');
+    expect(getChapterStory(56)!.title).toContain('Lighter Beds');
   });
 
   it('chapter 11 story is about grumpy cats', () => {
@@ -122,8 +128,9 @@ describe('Chapter Story Data', () => {
     expect(getChapterStory(50)).toBeNull();
   });
 
-  it('CHAPTERS_WITH_STORIES matches the 6 debut chapters', () => {
-    expect(CHAPTERS_WITH_STORIES.size).toBe(6);
+  it('CHAPTERS_WITH_STORIES matches the 9 debut chapters', () => {
+    expect(CHAPTERS_WITH_STORIES.size).toBe(9);
+    expect([...CHAPTERS_WITH_STORIES].filter(id => id > 50).sort((a, b) => a - b)).toEqual([51, 52, 56]);
     expect(CHAPTERS_WITH_STORIES.has(11)).toBe(true);
     expect(CHAPTERS_WITH_STORIES.has(16)).toBe(true);
     expect(CHAPTERS_WITH_STORIES.has(21)).toBe(true);

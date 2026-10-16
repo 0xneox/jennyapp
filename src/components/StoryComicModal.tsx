@@ -413,11 +413,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    gap: 10,
+    // Y3: gap:10 replaced with speechBubble marginLeft:10 below
     marginBottom: 16,
   },
   speechBubble: {
     flex: 1,
+    marginLeft: 10, // Y3: replaces speechBubbleRow gap:10
     backgroundColor: '#FFFDF9',
     borderRadius: 16,
     paddingHorizontal: 14,
@@ -456,12 +457,13 @@ const styles = StyleSheet.create({
   },
   dotsRow: {
     flexDirection: 'row',
-    gap: 8,
+    // Y3: gap:8 replaced with dot marginRight:8 below
     marginBottom: 16,
   },
   dot: {
     width: 8,
     height: 8,
+    marginRight: 8, // Y3: replaces dotsRow gap:8
     borderRadius: 4,
     backgroundColor: '#DDD4C4',
   },
@@ -474,7 +476,7 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    // Y3: gap:12 replaced with nextButton marginLeft:12 below
   },
   prevButton: {
     flex: 1,
@@ -484,5 +486,6 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     flex: 1.5,
+    marginLeft: 12, // Y3: replaces actionRow gap:12
   },
 });

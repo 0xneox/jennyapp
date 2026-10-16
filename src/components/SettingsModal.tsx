@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, useWindowDimensions, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../store/gameStore';
 import { soundManager } from '../utils/soundManager';
+import {
+  setNotificationsToggle,
+  checkNotificationPermission,
+} from '../utils/notifications';
+import { getNotificationsEnabled, storageReady } from '../utils/storage';
 import { CandyButton } from './candy/CandyButton';
 import { CandyPanel } from './candy/CandyPanel';
 import { CANDY_GOLD, CANDY_SURFACE, CANDY_TEXT } from '../utils/theme';
-import { LegalDocumentModal } from './LegalDocumentModal';
-import { LegalDocument, PRIVACY_POLICY, TERMS_OF_SERVICE } from '../data/legalText';
-import { adsAvailable, showConsentOptions, subscribeAdsReady } from '../ads/adManager';
+import { PRIVACY_URL, TERMS_URL } from './LegalAcceptanceModal';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -28,157 +32,245 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const { gameMode, setGameMode } = useGameStore();
   const [soundEnabled, setSoundEnabled] = useState(soundManager.isEnabled());
   const [bgmEnabled, setBgmEnabled] = useState(soundManager.isBgmEnabled());
-  const [legalDoc, setLegalDoc] = useState<LegalDocument | null>(null);
-  const [adsReady, setAdsReady] = useState(adsAvailable());
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
-  useEffect(() => subscribeAdsReady(() => setAdsReady(adsAvailable())), []);
+  // 10/10 on every device: compact spacing for Samsung A03-core class hardware
+  // (360dp×640dp usable area is the smallest Android market-share tier we target).
+  const isShortScreen = screenHeight < 700;
+  const isNarrowWidth = screenWidth < 360;
+  const facePadding = isShortScreen && isNarrowWidth ? 18 : isShortScreen || isNarrowWidth ? 20 : 24;
+  const sectionGap = Math.round((isShortScreen ? 16 : 22) * (isNarrowWidth ? 0.85 : 1));
+  const headerMargin = Math.round((isShortScreen ? 14 : 20) * (isNarrowWidth ? 0.9 : 1));
+  const rowGap = isShortScreen ? 12 : 16;
+  const _tap = () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); };
+
+  // ---- Bug #3 OFF/OFF sync: React's useState reads soundManager.isEnabled() runs the
+  // moment this component first mounts (before storage-reads AudioPrefs loaded. Singleton
+  // was at true/true. But App.js has yet loaded prefs loaded from store, so React local
+  // state is stale. Listeners below once init+init() finishes & fires once all storage
+  // has the REAL persisted sfxEnabled/bgmEnabled. Re-read at this fresh.
+  useEffect(() => {
+    const refresh = () => {
+      setSoundEnabled(soundManager.isEnabled());
+      setBgmEnabled(soundManager.isBgmEnabled());
+    };
+    refresh();
+    const unsub = soundManager.onInitDone(refresh);
+    return () => unsub();
+  }, []);
+
+  // Sync notification preference and system permission on modal open
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      await storageReady;
+      const pref = await getNotificationsEnabled();
+      const hasPerm = await checkNotificationPermission();
+      if (alive) {
+        setNotificationsEnabledState(pref === true && hasPerm);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [visible]);
+
+  const handleToggleNotifications = async () => {
+    _tap();
+    const next = !notificationsEnabled;
+    const success = await setNotificationsToggle(next);
+    if (success) {
+      setNotificationsEnabledState(next);
+      if (next) soundManager.play('button');
+    } else {
+      Alert.alert(
+        'Notifications Disabled',
+        'Please enable notifications for Jennydoku in your device settings to receive daily puzzle reminders.'
+      );
+    }
+  };
 
   if (!visible) return null;
 
+  const openLegalLink = async (url: string) => {
+    try {
+      _tap();
+      soundManager.play('button');
+      await Linking.openURL(url);
+    } catch (err) {
+      if (__DEV__) console.error('Failed to open legal link:', err);
+    }
+  };
+
   return (
-    <View style={styles.modalOverlay}>
-      <CandyPanel style={styles.settingsModal} contentStyle={styles.settingsModalFace}>
-        <View style={styles.settingsHeader}>
-          <Text style={styles.settingsTitle}>⚙️ Settings</Text>
+    <View
+      style={[
+        styles.modalOverlay,
+        {
+          paddingTop: Math.max(12, insets.top),
+          paddingBottom: Math.max(12, insets.bottom),
+          paddingLeft: Math.max(20, insets.left),
+          paddingRight: Math.max(20, insets.right),
+        },
+      ]}
+    >
+      <CandyPanel style={styles.settingsModal} contentStyle={[styles.settingsModalFace, { padding: facePadding }]}>
+        <View style={[styles.settingsHeader, { marginBottom: headerMargin }]}>
+          <Text style={[styles.settingsTitle, { fontSize: isNarrowWidth ? 20 : 22 }]}>⚙️ Settings</Text>
           <TouchableOpacity
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              _tap();
               onClose();
             }}
             style={styles.hintCloseIcon}
+            accessibilityLabel="Close settings"
+            accessibilityRole="button"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Text style={styles.hintCloseIconText}>✕</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Everything below the header scrolls when the panel is taller than
+            the screen — without this the Legal buttons (and Close) were
+            unreachable on short devices. */}
+        <ScrollView style={styles.settingsScroll}>
         {/* Mode Selection */}
-        <Text style={styles.settingsSectionTitle}>Game Mode</Text>
-        <View style={styles.settingsModeGroup}>
+        <Text style={[styles.settingsSectionTitle, { marginBottom: isShortScreen ? 8 : 10 }]}>Game Mode</Text>
+        <View style={[styles.settingsModeGroup, { marginBottom: sectionGap }]}>
           <TouchableOpacity
             style={[
               styles.settingsModeOption,
+              styles.settingsModeOptionFirst,
               gameMode === 'normal' && styles.settingsModeOptionActive,
             ]}
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              _tap();
               setGameMode('normal');
             }}
             activeOpacity={0.7}
           >
-            <Text style={styles.settingsModeEmoji}>🌱</Text>
+            <Text style={[styles.settingsModeEmoji, { fontSize: isNarrowWidth ? 22 : 26 }]}>🌱</Text>
             <Text
               style={[
                 styles.settingsModeText,
+                isNarrowWidth && { fontSize: 13 },
                 gameMode === 'normal' && styles.settingsModeTextActive,
               ]}
             >
               Normal
             </Text>
-            <Text style={styles.settingsModeSub}>First 3 oops free</Text>
+            <Text style={[styles.settingsModeSub, isShortScreen && { fontSize: 10 }]}>3 hearts per level</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.settingsModeOption,
+              styles.settingsModeOptionLast,
               gameMode === 'zen' && styles.settingsModeOptionActive,
             ]}
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              _tap();
               setGameMode('zen');
             }}
             activeOpacity={0.7}
           >
-            <Text style={styles.settingsModeEmoji}>🧘</Text>
+            <Text style={[styles.settingsModeEmoji, { fontSize: isNarrowWidth ? 22 : 26 }]}>🧘</Text>
             <Text
               style={[
                 styles.settingsModeText,
+                isNarrowWidth && { fontSize: 13 },
                 gameMode === 'zen' && styles.settingsModeTextActive,
               ]}
             >
               Zen Mode
             </Text>
-            <Text style={styles.settingsModeSub}>Infinite chances</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.settingsModeOption,
-              gameMode === 'challenge' && styles.settingsModeOptionActive,
-            ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setGameMode('challenge');
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.settingsModeEmoji}>⚡</Text>
-            <Text
-              style={[
-                styles.settingsModeText,
-                gameMode === 'challenge' && styles.settingsModeTextActive,
-              ]}
-            >
-              Challenge
-            </Text>
-            <Text style={styles.settingsModeSub}>3 hearts max</Text>
+            <Text style={[styles.settingsModeSub, isShortScreen && { fontSize: 10 }]}>Infinite chances</Text>
           </TouchableOpacity>
         </View>
 
         {/* Sound Toggle */}
-        <View style={styles.settingsRow}>
+        <View style={[styles.settingsRow, { paddingVertical: isShortScreen ? 10 : 14, marginBottom: rowGap }]}>
           <View style={styles.settingsRowLeft}>
-            <Text style={styles.settingsRowIcon}>🔊</Text>
-            <Text style={styles.settingsRowLabel}>Sound Effects</Text>
+            <Text style={[styles.settingsRowIcon, isNarrowWidth && { fontSize: 18 }]}>🔊</Text>
+            <Text style={[styles.settingsRowLabel, isNarrowWidth && { fontSize: 14 }]}>Sound Effects</Text>
           </View>
           <TouchableOpacity
             style={[styles.toggleSwitch, soundEnabled && styles.toggleSwitchActive]}
             onPress={() => {
               const next = !soundEnabled;
+              _tap();
               soundManager.setEnabled(next);
               setSoundEnabled(next);
               if (next) soundManager.play('button');
             }}
             activeOpacity={0.8}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: soundEnabled }}
+            accessibilityLabel="Sound effects"
           >
             <Text style={styles.toggleSwitchText}>{soundEnabled ? 'ON' : 'OFF'}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Background Music Toggle */}
-        <View style={styles.settingsRow}>
+        <View style={[styles.settingsRow, { paddingVertical: isShortScreen ? 10 : 14, marginBottom: rowGap }]}>
           <View style={styles.settingsRowLeft}>
-            <Text style={styles.settingsRowIcon}>🎵</Text>
-            <Text style={styles.settingsRowLabel}>Acoustic Music</Text>
+            <Text style={[styles.settingsRowIcon, isNarrowWidth && { fontSize: 18 }]}>🎵</Text>
+            <Text style={[styles.settingsRowLabel, isNarrowWidth && { fontSize: 14 }]}>Acoustic Music</Text>
           </View>
           <TouchableOpacity
             style={[styles.toggleSwitch, bgmEnabled && styles.toggleSwitchActive]}
             onPress={() => {
               const next = !bgmEnabled;
+              _tap();
               soundManager.setBgmEnabled(next);
               setBgmEnabled(next);
               if (next) soundManager.play('button');
             }}
             activeOpacity={0.8}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: bgmEnabled }}
+            accessibilityLabel="Acoustic background music"
           >
             <Text style={styles.toggleSwitchText}>{bgmEnabled ? 'ON' : 'OFF'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Daily Puzzle Notifications Toggle */}
+        <View style={[styles.settingsRow, { paddingVertical: isShortScreen ? 10 : 14, marginBottom: rowGap }]}>
+          <View style={styles.settingsRowLeft}>
+            <Text style={[styles.settingsRowIcon, isNarrowWidth && { fontSize: 18 }]}>🧠</Text>
+            <Text style={[styles.settingsRowLabel, isNarrowWidth && { fontSize: 14 }]}>Daily Puzzle Notifications</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.toggleSwitch, notificationsEnabled && styles.toggleSwitchActive]}
+            onPress={handleToggleNotifications}
+            activeOpacity={0.8}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: notificationsEnabled }}
+            accessibilityLabel="Daily puzzle notifications"
+          >
+            <Text style={styles.toggleSwitchText}>{notificationsEnabled ? 'ON' : 'OFF'}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Story & Lore Section */}
         {(onOpenStory || onOpenTutorial) && (
           <>
-            <Text style={styles.settingsSectionTitle}>Story & Learning</Text>
-            <View style={styles.storyButtonsRow}>
+            <Text style={[styles.settingsSectionTitle, { marginBottom: isShortScreen ? 8 : 10 }]}>Story & Learning</Text>
+            <View style={[styles.storyButtonsRow, { marginBottom: sectionGap, flexWrap: 'wrap' }]}>
               {onOpenStory && (
                 <CandyButton
                   skin="orange"
                   size="sm"
                   label="Story of Jenny"
                   icon={<Text style={styles.settingsStoryIcon}>📖</Text>}
-                  style={styles.settingsStoryButton}
+                  style={[styles.settingsStoryButton, styles.settingsStoryButtonFirst]}
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    _tap();
                     soundManager.play('button');
                     onClose();
                     onOpenStory();
@@ -192,9 +284,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   size="sm"
                   label="How to Play"
                   icon={<Text style={styles.settingsStoryIcon}>🎓</Text>}
-                  style={styles.settingsStoryButton}
+                  style={[styles.settingsStoryButton, styles.settingsStoryButtonLast]}
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    _tap();
                     soundManager.play('button');
                     onClose();
                     onOpenTutorial();
@@ -206,66 +298,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         )}
 
         {/* Legal Section */}
-        <Text style={styles.settingsSectionTitle}>Legal</Text>
-        <View style={styles.storyButtonsRow}>
+        <Text style={[styles.settingsSectionTitle, { marginBottom: isShortScreen ? 8 : 10 }]}>Legal</Text>
+        <View style={[styles.storyButtonsRow, { marginBottom: sectionGap, flexWrap: 'wrap' }]}>
           <CandyButton
             skin="neutral"
             size="sm"
-            label="Terms of Service"
+            label="Terms ↗"
             icon={<Text style={styles.settingsStoryIcon}>📜</Text>}
-            style={styles.settingsStoryButton}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              soundManager.play('button');
-              setLegalDoc(TERMS_OF_SERVICE);
-            }}
+            style={[styles.settingsStoryButton, styles.settingsStoryButtonFirst]}
+            onPress={() => openLegalLink(TERMS_URL)}
           />
           <CandyButton
             skin="neutral"
             size="sm"
-            label="Privacy Policy"
+            label="Privacy ↗"
             icon={<Text style={styles.settingsStoryIcon}>🔒</Text>}
-            style={styles.settingsStoryButton}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              soundManager.play('button');
-              setLegalDoc(PRIVACY_POLICY);
-            }}
+            style={[styles.settingsStoryButton, styles.settingsStoryButtonLast]}
+            onPress={() => openLegalLink(PRIVACY_URL)}
           />
-          {adsReady && (
-            <CandyButton
-              skin="neutral"
-              size="sm"
-              label="Privacy & Ads"
-              icon={<Text style={styles.settingsStoryIcon}>📺</Text>}
-              style={styles.settingsStoryButton}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                soundManager.play('button');
-                showConsentOptions();
-              }}
-            />
-          )}
         </View>
 
-        {/* Ad consent note — the button above opens Google's consent form,
-            which is only present when ads are initialized and the user's
-            region requires a privacy options entry point. */}
-
         {/* Action buttons */}
-        <View style={styles.settingsActions}>
+        <View style={[styles.settingsActions, { marginTop: isShortScreen ? 2 : 6 }]}>
           {onRestart && (
-            <CandyButton
-              block
-              skin="red"
-              label="Restart Level"
-              icon={<Text style={styles.settingsStoryIcon}>🔄</Text>}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                soundManager.play('button');
-                onRestart();
-              }}
-            />
+            <View style={{ marginBottom: 10 }}>
+              <CandyButton
+                block
+                skin="red"
+                label="Restart Level"
+                icon={<Text style={styles.settingsStoryIcon}>🔄</Text>}
+                onPress={() => {
+                  _tap();
+                  soundManager.play('button');
+                  onRestart();
+                }}
+              />
+            </View>
           )}
 
           <CandyButton
@@ -273,13 +341,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             skin="neutral"
             label="Close"
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              _tap();
               onClose();
             }}
           />
         </View>
+        </ScrollView>
       </CandyPanel>
-      <LegalDocumentModal doc={legalDoc} onClose={() => setLegalDoc(null)} />
     </View>
   );
 };
@@ -295,11 +363,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
-    padding: 20,
   },
   settingsModal: {
     width: '100%',
     maxWidth: 380,
+    // Fills the inset-padded overlay; its padding provides the margin.
+    maxHeight: '100%',
     shadowColor: '#0E0620',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.5,
@@ -310,6 +379,13 @@ const styles = StyleSheet.create({
     padding: 24,
     borderColor: CANDY_GOLD.base,
     borderWidth: 2,
+    // Compress to the capped wrapper so the ScrollView gets a bounded frame.
+    flexShrink: 1,
+  },
+  settingsScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minHeight: 0,
   },
   settingsHeader: {
     flexDirection: 'row',
@@ -326,9 +402,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 0,
   },
   hintCloseIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(20, 10, 44, 0.45)',
     borderWidth: 1.5,
     borderColor: CANDY_SURFACE.border,
@@ -336,7 +412,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   hintCloseIconText: {
-    fontSize: 16,
+    fontSize: 18,
     color: CANDY_TEXT.onDarkSoft,
     fontWeight: '900',
   },
@@ -351,8 +427,6 @@ const styles = StyleSheet.create({
   settingsModeGroup: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 22,
   },
   settingsModeOption: {
     flex: 1,
@@ -362,6 +436,14 @@ const styles = StyleSheet.create({
     borderColor: CANDY_SURFACE.bevel,
     alignItems: 'center',
     backgroundColor: 'rgba(20, 10, 44, 0.4)',
+    // Y3: gap:12 replaced with explicit 6 + 6 = 12 between cards
+    marginHorizontal: 6,
+  },
+  settingsModeOptionFirst: {
+    marginLeft: 0,
+  },
+  settingsModeOptionLast: {
+    marginRight: 0,
   },
   settingsModeOptionActive: {
     borderColor: CANDY_GOLD.base,
@@ -397,10 +479,10 @@ const styles = StyleSheet.create({
   settingsRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
   settingsRowIcon: {
     fontSize: 20,
+    marginRight: 10, // Y3: replaces settingsRowLeft row gap:10
   },
   settingsRowLabel: {
     fontSize: 16,
@@ -428,17 +510,22 @@ const styles = StyleSheet.create({
   },
   storyButtonsRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
   },
   settingsStoryButton: {
     flex: 1,
+    // Y3: replaces storyButtonsRow gap:10 → every child gets marginHorizontal:5
+    marginHorizontal: 5,
+  },
+  settingsStoryButtonFirst: {
+    marginLeft: 0,
+  },
+  settingsStoryButtonLast: {
+    marginRight: 0,
   },
   settingsStoryIcon: {
     fontSize: 16,
   },
   settingsActions: {
-    gap: 10,
-    marginTop: 6,
+    // Restart button (if any) wraps a marginBottom:10 View; Close sits flush below.
   },
 });

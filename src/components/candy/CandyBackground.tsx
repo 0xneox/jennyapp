@@ -1,28 +1,47 @@
 import React from 'react';
 import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CANDY_BACKDROP } from '../../utils/theme';
+import { CANDY_BACKDROP, getBackdropPreset } from '../../utils/theme';
 
 interface CandyBackgroundProps {
   children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Level number — when supplied, swaps between 7 unique backdrop gradients
+   * (Deep Grape / Sunset Shore / Aurora Forest / Midnight Neon / Dawn Meadow
+   *  / Ocean Abyss / Candy Citrus) plus their matching center glow so even
+   * the whole-screen background doesn't stay identical across 1000 levels.
+   *
+   * When omitted, keeps the original Deep Grape arcade backdrop (safe
+   * default for non-level screens like Home / World Map initial renders).
+   */
+  level?: number;
 }
 
 /**
- * Deep grape arcade backdrop. A vertical gradient plus a large soft glow behind
- * the play area, so the saturated tiles read as lit from within instead of
- * sitting flat on a single fill.
+ * Arcade backdrop: 3-stop vertical gradient + soft centered glow.
+ * When `level` is passed, one of 7 unique themed sky palettes is picked from
+ * a deterministic seed so level 12 ≠ level 57 visually.
  */
-export const CandyBackground: React.FC<CandyBackgroundProps> = ({ children, style }) => (
-  <LinearGradient
-    colors={[CANDY_BACKDROP.top, CANDY_BACKDROP.mid, CANDY_BACKDROP.bottom]}
-    locations={[0, 0.55, 1]}
-    style={[styles.fill, style]}
-  >
-    <View pointerEvents="none" style={styles.glow} />
-    {children}
-  </LinearGradient>
-);
+export const CandyBackground: React.FC<CandyBackgroundProps> = ({ children, style, level }) => {
+  const preset = level !== undefined ? getBackdropPreset(level) : CANDY_BACKDROP;
+  return (
+    <LinearGradient
+      colors={[preset.top, preset.mid, preset.bottom]}
+      locations={[0, 0.55, 1]}
+      style={[styles.fill, style]}
+    >
+      <View
+        pointerEvents="none"
+        style={[
+          styles.glow,
+          { backgroundColor: preset.glowCenter },
+        ]}
+      />
+      {children}
+    </LinearGradient>
+  );
+};
 
 const styles = StyleSheet.create({
   fill: {
@@ -35,7 +54,6 @@ const styles = StyleSheet.create({
     width: 520,
     height: 520,
     borderRadius: 260,
-    backgroundColor: CANDY_BACKDROP.glowCenter,
     opacity: 0.5,
   },
 });

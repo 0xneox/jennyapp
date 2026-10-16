@@ -103,11 +103,11 @@ describe('Step 2: Content Scaling to 1000 Levels & 50 Thematic Chapters', () => 
     });
   });
 
-  describe('50 Thematic Chapters Structure', () => {
-    it('contains exactly 50 chapters covering levels 1 to 1000 seamlessly', () => {
-      expect(CHAPTERS.length).toBe(50);
+  describe('60 Thematic Chapters Structure', () => {
+    it('contains exactly 60 chapters covering levels 1 to 1200 seamlessly', () => {
+      expect(CHAPTERS.length).toBe(60);
       expect(CHAPTERS[0].start).toBe(1);
-      expect(CHAPTERS[CHAPTERS.length - 1].end).toBe(1000);
+      expect(CHAPTERS[CHAPTERS.length - 1].end).toBe(1200);
 
       // Verify no gaps and continuous intervals
       for (let i = 0; i < CHAPTERS.length; i++) {
@@ -126,11 +126,13 @@ describe('Step 2: Content Scaling to 1000 Levels & 50 Thematic Chapters', () => 
       expect(getChapterForLevel(500).id).toBe(25);
       expect(getChapterForLevel(1000).title).toBe('Jenny’s Sanctuary');
       expect(getChapterIndexForLevel(1000)).toBe(49);
+      expect(getChapterForLevel(1200).title).toBe('Aurora Apex');
+      expect(getChapterIndexForLevel(1200)).toBe(59);
     });
   });
 
-  describe('GameStore 1000-Level Support', () => {
-    it('allows starting level past 100 up to 1000', () => {
+  describe('GameStore 1200-Level Support', () => {
+    it('allows starting level past 100 up to 1200', () => {
       const store = useGameStore.getState();
       store.startLevel(250);
 
@@ -141,12 +143,12 @@ describe('Step 2: Content Scaling to 1000 Levels & 50 Thematic Chapters', () => 
       expect(state.board.regions.length).toBe(6);
     });
 
-    it('clamps levels between 1 and 1000', () => {
+    it('clamps levels between 1 and 1200', () => {
       const store = useGameStore.getState();
       store.startLevel(1500);
 
       let state = useGameStore.getState();
-      expect(state.currentLevel).toBe(1000);
+      expect(state.currentLevel).toBe(1200);
 
       store.startLevel(-10);
       state = useGameStore.getState();

@@ -1,5 +1,5 @@
 /**
- * Builds src/data/twinTrialStart.ts: for every twin level (601-1000), the
+ * Builds src/data/twinTrialStart.ts: for every twin level (601+), the
  * first seed trial whose board passes generation (incl. the solution cap).
  * Slow (minutes) — run once whenever generator rules or the cap change.
  *
@@ -7,14 +7,14 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { generateDeterministicPuzzle, getLevelMechanics } from '../src/data/proceduralPuzzles';
+import { generateDeterministicPuzzle, getLevelMechanics, MAX_LEVEL } from '../src/data/proceduralPuzzles';
 
 const table: Record<number, number> = {};
 const t0 = Date.now();
-for (let level = 101; level <= 1000; level++) {
+for (let level = 101; level <= MAX_LEVEL; level++) {
   if (getLevelMechanics(level).puppiesPerUnit < 2) continue;
   const s = Date.now();
-  const p = generateDeterministicPuzzle(level, 0);
+  const p = generateDeterministicPuzzle(level, 0, true);
   if (p.seedTrial === undefined) throw new Error(`Level ${level} fell back to handcrafted data`);
   table[level] = p.seedTrial;
   console.log(`L${level}: trial ${p.seedTrial} (${Date.now() - s}ms)`);

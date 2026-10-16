@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    // Y3: gap:8 — icon child (if any) is rendered inline with marginRight:8 via style prop
   },
   label: {
     fontWeight: '900',

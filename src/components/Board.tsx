@@ -31,6 +31,8 @@ interface BoardProps {
   quota?: number;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  /** Level number — drives per-level gradient hue/saturation variants on cells. */
+  level?: number;
 }
 
 export const Board: React.FC<BoardProps> = ({
@@ -46,6 +48,7 @@ export const Board: React.FC<BoardProps> = ({
   quota,
   onDragStart,
   onDragEnd,
+  level = 1,
 }) => {
   const lastMarkedCellRef = useRef<{ row: number; col: number } | null>(null);
   const isDraggingRef = useRef(false);
@@ -92,7 +95,7 @@ export const Board: React.FC<BoardProps> = ({
   }, [board.cells, board.gridSize, showCatAura]);
 
   // Linked beds: regions whose cells aren't 4-connected share one puppy.
-  // Detected structurally so the 🔗 badge shows even if data forgets the flag.
+  // Detected structurally so the 🦴 badge shows even if data forgets the flag.
   const linkedRegionIds = useMemo(() => {
     const ids = new Set<number>();
     for (const region of board.regions) {
@@ -117,6 +120,19 @@ export const Board: React.FC<BoardProps> = ({
       if (visited.size !== region.cells.length) ids.add(region.id);
     }
     return ids;
+  }, [board.regions]);
+
+  // Hungry beds: regions with their own pup requirement get a numeric badge
+  // on their top-left-most cell (reads like a killer-sudoku cage label).
+  const hungryBadges = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const region of board.regions) {
+      if (region.requiredPups === undefined || region.cells.length === 0) continue;
+      const anchor = region.cells.reduce((a, b) =>
+        a.row < b.row || (a.row === b.row && a.col <= b.col) ? a : b);
+      map.set(`${anchor.row},${anchor.col}`, region.requiredPups);
+    }
+    return map;
   }, [board.regions]);
 
   const getRegionId = (row: number, col: number): number | undefined => {
@@ -221,33 +237,35 @@ export const Board: React.FC<BoardProps> = ({
                   const borders = getBorders(rowIndex, colIndex, regionId);
 
                   return (
-                    <Cell
-                      key={`${rowIndex}-${colIndex}`}
-                      value={cell.value}
-                      onPress={() => pressCell(rowIndex, colIndex)}
-                      regionId={regionId}
-                      size={cellSize}
-                      borders={borders}
-                      row={rowIndex}
-                      col={colIndex}
-                      isWrong={
-                        wrongCell?.row === rowIndex &&
-                        wrongCell?.col === colIndex
-                      }
-                      isHinted={
-                        hintCell?.row === rowIndex &&
-                        hintCell?.col === colIndex
-                      }
-                      isCatAura={catAuraCells.has(`${rowIndex},${colIndex}`)}
-                      isLinkedPulse={
-                        linkedPulseRegionId !== null &&
-                        linkedPulseRegionId !== undefined &&
-                        regionId === linkedPulseRegionId
-                      }
-                      showBow={quota !== undefined && quota > 1}
-                      isCompleting={isCompleting}
-                      isLinked={regionId !== undefined && linkedRegionIds.has(regionId)}
-                    />
+                      <Cell
+                        key={`${rowIndex}-${colIndex}`}
+                        value={cell.value}
+                        onPress={() => pressCell(rowIndex, colIndex)}
+                        regionId={regionId}
+                        size={cellSize}
+                        borders={borders}
+                        row={rowIndex}
+                        col={colIndex}
+                        isWrong={
+                          wrongCell?.row === rowIndex &&
+                          wrongCell?.col === colIndex
+                        }
+                        isHinted={
+                          hintCell?.row === rowIndex &&
+                          hintCell?.col === colIndex
+                        }
+                        isCatAura={catAuraCells.has(`${rowIndex},${colIndex}`)}
+                        isLinkedPulse={
+                          linkedPulseRegionId !== null &&
+                          linkedPulseRegionId !== undefined &&
+                          regionId === linkedPulseRegionId
+                        }
+                        showBow={quota !== undefined && quota > 1}
+                        isCompleting={isCompleting}
+                        isLinked={regionId !== undefined && linkedRegionIds.has(regionId)}
+                        requiredPups={hungryBadges.get(`${rowIndex},${colIndex}`)}
+                        level={level}
+                      />
                   );
                 })}
               </View>

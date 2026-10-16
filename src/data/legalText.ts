@@ -10,7 +10,7 @@ import { APP_NAME } from '../utils/theme';
  */
 export const CONTACT_EMAIL = 'neohex262@pm.me';
 export const LEGAL_ENTITY = '21b Labs';
-export const LEGAL_LAST_UPDATED = 'September 18, 2026';
+export const LEGAL_LAST_UPDATED = 'October 10, 2026';
 
 export interface LegalSection {
   heading: string;
@@ -29,11 +29,15 @@ export const PRIVACY_POLICY: LegalDocument = {
   sections: [
     {
       heading: 'The short version',
-      body: `${APP_NAME} is an offline puzzle game supported by ads. The game itself does not collect, transmit, or sell any personal data — your progress, settings, and stats stay on your device. Ads are served by Google AdMob, which processes limited device data to deliver and measure ads (see "Advertising" below).`,
+      body: `${APP_NAME} is a puzzle game supported by ads that can be played fully offline. We never ask for your name, email, or any account. Your progress, settings, and stats stay on your device unless you choose to join the optional global leaderboard, which shares only a made-up player name, a cartoon avatar, and your game points (see "Optional global leaderboard"). We never sell data. Ads are served by Google AdMob, which processes limited device data to deliver and measure ads (see "Advertising" below).`,
+    },
+    {
+      heading: 'Optional global leaderboard',
+      body: `The leaderboard is off until you tap "Join the Leaderboard". If you join, the app sends the following to our leaderboard server (hosted by Supabase):\n\n• A random ID created on your device (stored only as a one-way hash, not linked to your device, advertising ID, or any account)\n• Your player name, chosen only from a fixed list of friendly words plus a number — you can't type free text\n• Your chosen cartoon avatar\n• Your best score on each level and the dates you completed the Daily Garden, used to calculate your points\n\nOther players can see your player name, avatar, rank, and points. As with any internet connection, the server receives your IP address to answer requests; we don't store it with your leaderboard entry.\n\nYou can leave at any time from the Leaderboard → your avatar → "Leave leaderboard & delete my scores". This permanently deletes your leaderboard entry and scores from the server.`,
     },
     {
       heading: 'What is stored on your device',
-      body: 'The game saves the following locally on your device (never sent to us or anyone else):\n\n• Level progress and unlocked levels\n• Game mode, sound, and music settings\n• Daily challenge streaks and stats\n• Story and tutorial "seen" flags\n• Your ad consent choice (where consent is required)\n\nThis data lives in your browser\'s local storage (web) or the app\'s private storage (Android/iOS).',
+      body: 'The game saves the following locally on your device (not sent to us or anyone else, except the leaderboard data listed above if you join):\n\n• Level progress and unlocked levels\n• Game mode, sound, and music settings\n• Daily challenge streaks and stats\n• Story and tutorial "seen" flags\n• Your ad consent choice (where consent is required)\n• Your leaderboard player name, avatar, and random ID\n\nThis data lives in your browser\'s local storage (web) or the app\'s private storage (Android/iOS).',
     },
     {
       heading: 'Advertising (Google AdMob)',
@@ -41,23 +45,23 @@ export const PRIVACY_POLICY: LegalDocument = {
     },
     {
       heading: 'What we do NOT collect',
-      body: `• No accounts or sign-ups\n• No analytics or tracking by us\n• No location data\n• No contacts, photos, or files\n• No crash reporting sent to third parties\n\n(Our ad partner Google processes its own data under Google's policies — see "Advertising".)`,
+      body: `• No accounts, sign-ups, names, or email addresses\n• No free-text input of any kind\n• No analytics or tracking by us\n• No location data\n• No contacts, photos, or files\n• No crash reporting sent to third parties\n\n(Our ad partner Google processes its own data under Google's policies — see "Advertising".)`,
     },
     {
       heading: 'Children\'s privacy',
-      body: `${APP_NAME} itself collects no personal information from anyone, including children under 13, and the game can be played fully offline. Ads shown are limited to a family-appropriate content rating.`,
+      body: `${APP_NAME} does not collect personal information from anyone, including children under 13, and the game can be played fully offline. The optional leaderboard was designed for kids: names can only be built from a fixed list of friendly words, avatars are cartoons, and nothing identifies the player in real life. Ads shown are limited to a family-appropriate content rating.`,
     },
     {
       heading: 'Data Safety (Play Store)',
-      body: 'For the Play Console Data Safety form: the app shares the device advertising ID with Google AdMob for advertising purposes. No personal data is collected by or transmitted to the developer.',
+      body: 'For the Play Console Data Safety form: the app shares the device advertising ID with Google AdMob for advertising purposes. If the player joins the optional leaderboard, the app collects in-game app activity (a made-up player name, avatar, scores, and daily completion dates) and a random app-generated ID, used only to run the leaderboard. This data is encrypted in transit, is not shared with third parties or sold, and can be deleted in-app at any time.',
     },
     {
       heading: 'Deleting your data',
-      body: 'Uninstalling the app removes all locally stored data. On the web version, clearing your browser\'s site data removes it.',
+      body: 'To delete your leaderboard data, open Leaderboard → your avatar → "Leave leaderboard & delete my scores". Uninstalling the app removes all locally stored data (if you uninstall without leaving the leaderboard first, email us your player name and we will remove that entry). On the web version, clearing your browser\'s site data removes local data.',
     },
     {
       heading: 'Changes to this policy',
-      body: `If ${APP_NAME} ever adds online features (such as a leaderboard), this policy will be updated before those features ship, and any new data handling will be described here.`,
+      body: `If ${APP_NAME} adds new online features, this policy will be updated before those features ship, and any new data handling will be described here.`,
     },
     {
       heading: 'Contact',

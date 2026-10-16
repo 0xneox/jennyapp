@@ -26,8 +26,9 @@ import { PuzzleSolver } from '../src/game/solver';
 import { GameEngine } from '../src/game/engine';
 import { useGameStore } from '../src/store/gameStore';
 
-const twinLevels = Array.from({ length: 400 }, (_, i) => 601 + i);
-const sample = [601, 640, 700, 760, 801, 850, 901, 946, 975, 1000];
+const twinLevels = Array.from({ length: 600 }, (_, i) => 601 + i);
+const sample = [601, 640, 700, 760, 801, 850, 901, 946, 975, 1000,
+                1001, 1021, 1041, 1061, 1081, 1101, 1121, 1141, 1161, 1181, 1200];
 
 const catForbidden = (p: ReturnType<typeof getPuzzle>) => {
   const n = p.gridSize;
@@ -56,7 +57,17 @@ describe('Twin trial table', () => {
     expect(p.gridSize).toBe(getLevelConfig(level).gridSize);
     expect(p.puppiesPerUnit).toBe(2);
     expect(p.cats?.length).toBe(getLevelMechanics(level).catCount);
-    expect(p.regions.filter(r => r.linked).length).toBe(getLevelMechanics(level).linkedCount);
+    // Hungry donors can split into extra linked beds, so only non-hungry
+    // specs promise an exact linked count.
+    const deltas = getLevelMechanics(level).hungryDeltas ?? [];
+    const linkedCount = p.regions.filter(r => r.linked).length;
+    if (deltas.length > 0) {
+      expect(linkedCount).toBeGreaterThanOrEqual(getLevelMechanics(level).linkedCount);
+    } else {
+      expect(linkedCount).toBe(getLevelMechanics(level).linkedCount);
+    }
+    const hungryDeltaCount = deltas.length;
+    expect(p.regions.filter(r => r.requiredPups !== undefined).length).toBe(hungryDeltaCount);
   });
 
   it('the recorded trial is the FIRST passing trial (table is canonical)', () => {
@@ -77,6 +88,43 @@ describe('Twin solution cap', () => {
   it.each(sample)('level %i: the stored solution is valid by construction', level => {
     const p = getPuzzle(level);
     expect(new GameEngine(p).validateSolution(p.solution)).toBe(true);
+  });
+});
+
+describe('Hungry beds', () => {
+  const hungryLevels = [1021, 1061, 1101, 1141, 1161, 1181];
+
+  it.each(hungryLevels)('level %i: labels sum to the board total and match the spec', level => {
+    const p = getPuzzle(level);
+    const mech = getLevelMechanics(level);
+    const quota = mech.puppiesPerUnit;
+    const labelled = p.regions.filter(r => r.requiredPups !== undefined);
+    // Every spec delta materialises exactly once.
+    const deltas = [...(mech.hungryDeltas ?? [])].sort((a, b) => a - b);
+    const actual = labelled.map(r => (r.requiredPups ?? quota) - quota).sort((a, b) => a - b);
+    expect(actual).toEqual(deltas);
+    // Region requirements still sum to n * quota → total pups unchanged.
+    const total = p.regions.reduce((s, r) => s + (r.requiredPups ?? quota), 0);
+    expect(total).toBe(p.gridSize * quota);
+  });
+
+  it.each(hungryLevels)('level %i: feast and pond regions really hold their counts', level => {
+    const p = getPuzzle(level);
+    for (const region of p.regions) {
+      const inSolution = p.solution.filter(s =>
+        region.cells.some(c => c.row === s.row && c.col === s.col)).length;
+      expect(inSolution).toBe(region.requiredPups ?? p.puppiesPerUnit);
+    }
+    expect(new GameEngine(p).validateSolution(p.solution)).toBe(true);
+  });
+
+  it('a 0-pup pond region rejects every placement inside it', () => {
+    const pond = [1061, 1141, 1181].map(getPuzzle).find(p =>
+      p.regions.some(r => r.requiredPups === 0));
+    expect(pond).toBeDefined();
+    const engine = new GameEngine(pond!);
+    const cell = pond!.regions.find(r => r.requiredPups === 0)!.cells[0];
+    expect(engine.placePuppy(cell.row, cell.col)).toBe(false);
   });
 });
 

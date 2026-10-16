@@ -207,6 +207,7 @@ export const getTutorialSeen = async (): Promise<boolean> => {
 };
 
 const STORY_KEY = '@jenny_story_seen';
+const LEGAL_ACCEPTED_KEY = '@jenny_legal_accepted_v1';
 
 export const setStorySeen = async (seen: boolean): Promise<void> => {
   try {
@@ -254,11 +255,98 @@ export const hasChapterStoryBeenSeen = async (chapter: number): Promise<boolean>
   return seen.includes(chapter);
 };
 
+/**
+ * Whether the user has already accepted the Terms of Service + Privacy Policy.
+ *
+ * Required by Play Console for any app handling personal data: acceptance must
+ * be collected once, persistently stored, and never silently revoked on update.
+ * Versioned key (_v1) so we can re-prompt if the legal text materially changes.
+ */
+export const setLegalAccepted = async (accepted: boolean): Promise<void> => {
+  try {
+    await setItem(LEGAL_ACCEPTED_KEY, accepted ? 'true' : 'false');
+  } catch (error) {
+    console.error('Error setting legal acceptance:', error);
+  }
+};
+
+export const getLegalAccepted = async (): Promise<boolean> => {
+  try {
+    return (await getItem(LEGAL_ACCEPTED_KEY)) === 'true';
+  } catch (error) {
+    console.error('Error getting legal acceptance:', error);
+    return false;
+  }
+};
+
+const NOTIFICATIONS_ENABLED_KEY = '@jenny_notifications_enabled';
+const NOTIFICATION_PROMPT_SHOWN_KEY = '@jenny_notification_prompt_shown';
+
+export const setNotificationsEnabled = async (enabled: boolean): Promise<void> => {
+  try {
+    await setItem(NOTIFICATIONS_ENABLED_KEY, enabled ? 'true' : 'false');
+  } catch (error) {
+    console.error('Error setting notifications enabled:', error);
+  }
+};
+
+export const getNotificationsEnabled = async (): Promise<boolean | null> => {
+  try {
+    const value = await getItem(NOTIFICATIONS_ENABLED_KEY);
+    if (value === null) return null;
+    return value === 'true';
+  } catch (error) {
+    console.error('Error getting notifications enabled:', error);
+    return null;
+  }
+};
+
+export const setNotificationPromptShown = async (shown: boolean): Promise<void> => {
+  try {
+    await setItem(NOTIFICATION_PROMPT_SHOWN_KEY, shown ? 'true' : 'false');
+  } catch (error) {
+    console.error('Error setting notification prompt shown:', error);
+  }
+};
+
+export const getNotificationPromptShown = async (): Promise<boolean> => {
+  try {
+    return (await getItem(NOTIFICATION_PROMPT_SHOWN_KEY)) === 'true';
+  } catch (error) {
+    console.error('Error getting notification prompt shown:', error);
+    return false;
+  }
+};
+
+const CHAPTER_STAMPS_KEY = '@jenny_claimed_chapter_stamps';
+
+export const getClaimedChapterStamps = async (): Promise<number[]> => {
+  try {
+    const value = await getItem(CHAPTER_STAMPS_KEY);
+    if (!value) return [];
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((v: unknown) => typeof v === 'number') : [];
+  } catch (error) {
+    console.error('Error getting claimed chapter stamps:', error);
+    return [];
+  }
+};
+
+export const saveClaimedChapterStamp = async (chapterId: number): Promise<void> => {
+  try {
+    const existing = await getClaimedChapterStamps();
+    if (existing.includes(chapterId)) return;
+    await setItem(CHAPTER_STAMPS_KEY, JSON.stringify([...existing, chapterId]));
+  } catch (error) {
+    console.error('Error saving claimed chapter stamp:', error);
+  }
+};
+
 const DAILY_CHALLENGE_KEY = '@jenny_daily_challenge';
 
 const MECHANIC_INTRO_KEY = '@jenny_mechanic_intros_seen';
 
-export type MechanicIntroKey = 'cats' | 'linked' | 'twin';
+export type MechanicIntroKey = 'cats' | 'linked' | 'twin' | 'hungry';
 
 export const setMechanicIntroSeen = async (key: MechanicIntroKey): Promise<void> => {
   try {
@@ -276,7 +364,7 @@ export const getMechanicIntrosSeen = async (): Promise<MechanicIntroKey[]> => {
     if (!value) return [];
     const parsed = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
-    const validKeys: MechanicIntroKey[] = ['cats', 'linked', 'twin'];
+    const validKeys: MechanicIntroKey[] = ['cats', 'linked', 'twin', 'hungry'];
     return parsed.filter((v: unknown): v is MechanicIntroKey =>
       typeof v === 'string' && validKeys.includes(v as MechanicIntroKey)
     );
@@ -398,11 +486,11 @@ export const PUPPY_MILESTONES: PuppyMilestone[] = [
     chapter: 20,
     level: 400,
     breedName: 'Highland Terrier Scout',
-    badgeTitle: 'Linked Bed Pioneer 🔗',
+    badgeTitle: 'Linked Bed Pioneer 🦴',
     icon: '🐶',
     quote: 'Fearless and spirited! Mastered the magic of linked beds across distant gardens!',
     color: '#8E44AD',
-    powerUnlocked: 'Linked Beds! 🔗 Two flower beds can share one puppy!',
+    powerUnlocked: 'Linked Beds! 🦴 Two flower beds can share one puppy!',
   },
   {
     chapter: 30,
@@ -412,7 +500,7 @@ export const PUPPY_MILESTONES: PuppyMilestone[] = [
     icon: '🐺',
     quote: 'Wise and watchful! Handles cats AND linked beds together like a true expert!',
     color: '#1565C0',
-    powerUnlocked: 'Combo Gardens! 😾🔗 Cats and linked beds together!',
+    powerUnlocked: 'Combo Gardens! 😾🦴 Cats and linked beds together!',
   },
   {
     chapter: 40,
@@ -453,6 +541,25 @@ export const loadClaimedAdoptions = async (): Promise<number[]> => {
   }
 };
 
+const STAR_MILESTONES_KEY = '@jenny_claimed_star_milestones_v1';
+
+export const saveClaimedStarMilestones = async (milestones: number[]): Promise<void> => {
+  try {
+    await setItem(STAR_MILESTONES_KEY, JSON.stringify(milestones));
+  } catch (error) {
+    console.error('Error saving claimed star milestones:', error);
+  }
+};
+
+export const loadClaimedStarMilestones = async (): Promise<number[]> => {
+  try {
+    return parseNumberArray(await getItem(STAR_MILESTONES_KEY));
+  } catch (error) {
+    console.error('Error loading claimed star milestones:', error);
+    return [];
+  }
+};
+
 /** Last time an interstitial ad was shown (ms epoch) — backs the frequency cap. */
 export const getLastInterstitialAt = async (): Promise<number> => {
   try {
@@ -470,6 +577,173 @@ export const setLastInterstitialAt = async (ts: number): Promise<void> => {
     await setItem(LAST_INTERSTITIAL_KEY, String(ts));
   } catch (error) {
     console.error('Error saving interstitial timestamp:', error);
+  }
+};
+
+/**
+ * Persistent daily-streak bonus hints.
+ *
+ * Daily streaks now produce TANGIBLE rewards in addition to the cosmetic
+ * badge titles (see STREAK_REWARDS in dailyChallenge.ts).
+ *
+ *   3 days  → +1 free hint on every level forever
+ *   7 days  → +2 free hints on every level forever
+ *  14 days  → +3 free hints on every level (cap)
+ *  30 days  → +3 capped; badge only (hints are already at the ceiling)
+ *
+ * We store the *current bonus hints per level* as a single integer so the
+ * store & GameScreen hint limit (FREE_HINTS_PER_LEVEL + streak + adFree)
+ * formula reads it O(1) without importing daily state.
+ */
+const STREAK_HINTS_KEY = '@jenny_streak_hints';
+const MAX_STREAK_BONUS_HINTS = 3;
+
+// --- Streak Shop consumables (non-resetting; purchased via streak tier spend)
+// Hints + undos are global pool. Skips are consumed once per level (keyed by the
+// level the player skipped so we never allow double-skip the same level).
+const CONSUMABLE_HINTS_KEY = '@jenny_consumable_hints_v1';
+const CONSUMABLE_UNDOS_KEY = '@jenny_consumable_undos_v1';
+const LEVELS_SKIPPED_KEY = '@jenny_levels_skipped_v1';
+// Snapshot of streak counter RIGHT BEFORE it was reset by a missed day — used
+// by "🛠️ Repair Streak via Rewarded Ad" so a 12-day streak broken on day 13
+// can be fully restored, not just bumped to 1.
+const LAST_STREAK_BEFORE_RESET_KEY = '@jenny_last_streak_snapshot_v1';
+
+const readIntSafe = async (key: string): Promise<number> => {
+  try {
+    const raw = await getItem(key);
+    if (raw == null) return 0;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const writeIntSafe = async (key: string, n: number): Promise<void> => {
+  try {
+    const safe = Math.max(0, Math.floor(n));
+    await setItem(key, String(safe));
+  } catch {
+    // noop — storage backend flake doesn't hard-block gameplay
+  }
+};
+
+export async function loadConsumableHints(): Promise<number> {
+  return readIntSafe(CONSUMABLE_HINTS_KEY);
+}
+export async function saveConsumableHints(n: number): Promise<void> {
+  return writeIntSafe(CONSUMABLE_HINTS_KEY, n);
+}
+export async function loadConsumableUndos(): Promise<number> {
+  return readIntSafe(CONSUMABLE_UNDOS_KEY);
+}
+export async function saveConsumableUndos(n: number): Promise<void> {
+  return writeIntSafe(CONSUMABLE_UNDOS_KEY, n);
+}
+
+export const loadLevelsSkipped = async (): Promise<number[]> => {
+  try {
+    const raw = await getItem(LEVELS_SKIPPED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    // Upper bound mirrors MAX_LEVEL in proceduralPuzzles (kept literal here —
+    // storage is a leaf module and must not pull in the puzzle graph).
+    return Array.isArray(parsed) ? parsed.filter((v: unknown): v is number => typeof v === 'number' && v >= 1 && v <= 1200) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveLevelSkipped = async (level: number): Promise<void> => {
+  try {
+    const current = new Set(await loadLevelsSkipped());
+    if (current.has(level)) return;
+    current.add(level);
+    await setItem(LEVELS_SKIPPED_KEY, JSON.stringify([...current].sort((a, b) => a - b)));
+  } catch {
+    // noop
+  }
+};
+
+export async function loadLastStreakBeforeReset(): Promise<number> {
+  return readIntSafe(LAST_STREAK_BEFORE_RESET_KEY);
+}
+export async function saveLastStreakBeforeReset(n: number): Promise<void> {
+  return writeIntSafe(LAST_STREAK_BEFORE_RESET_KEY, n);
+}
+
+export const loadStreakBonusHintsPerLevel = async (): Promise<number> => {
+  try {
+    const raw = await getItem(STREAK_HINTS_KEY);
+    if (raw == null) return 0;
+    const n = Math.max(0, Math.min(MAX_STREAK_BONUS_HINTS, parseInt(raw, 10)));
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+};
+
+export const saveStreakBonusHintsPerLevel = async (hints: number): Promise<void> => {
+  const clamped = Math.max(0, Math.min(MAX_STREAK_BONUS_HINTS, Math.trunc(hints)));
+  try {
+    await setItem(STREAK_HINTS_KEY, String(clamped));
+  } catch (error) {
+    console.error('Error saving streak bonus hints:', error);
+  }
+};
+
+export const STREAK_MAX_BONUS_HINTS = MAX_STREAK_BONUS_HINTS;
+
+// --- Leaderboard profile ----------------------------------------------------
+// `secret` is a random per-install token; only its hash is stored server-side.
+// Name/avatar are indexes into src/data/profileOptions.ts (validated there —
+// storage stays a leaf module).
+const PLAYER_PROFILE_KEY = '@jenny_player_profile_v1';
+
+export interface PlayerProfile {
+  secret: string;
+  nameAdj: number;
+  nameNoun: number;
+  nameNum: number;
+  avatar: number;
+  /** True once the player opted into the global leaderboard. */
+  joined: boolean;
+}
+
+export const loadPlayerProfile = async (): Promise<PlayerProfile | null> => {
+  try {
+    const raw = await getItem(PLAYER_PROFILE_KEY);
+    if (raw == null) return null;
+    const p = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      typeof p !== 'object' || p === null ||
+      typeof p.secret !== 'string' || p.secret.length < 32 ||
+      !isFiniteNumber(p.nameAdj) || !isFiniteNumber(p.nameNoun) ||
+      !isFiniteNumber(p.nameNum) || !isFiniteNumber(p.avatar)
+    ) {
+      console.warn('Discarding corrupt player profile payload');
+      return null;
+    }
+    return {
+      secret: p.secret,
+      nameAdj: p.nameAdj,
+      nameNoun: p.nameNoun,
+      nameNum: p.nameNum,
+      avatar: p.avatar,
+      joined: p.joined === true,
+    };
+  } catch (error) {
+    console.error('Error loading player profile:', error);
+    return null;
+  }
+};
+
+export const savePlayerProfile = async (profile: PlayerProfile): Promise<void> => {
+  try {
+    await setItem(PLAYER_PROFILE_KEY, JSON.stringify(profile));
+  } catch (error) {
+    console.error('Error saving player profile:', error);
   }
 };
 

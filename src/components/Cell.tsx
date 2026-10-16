@@ -31,9 +31,21 @@ interface CellProps {
   isCompleting?: boolean;
   /** True when this cell belongs to a non-contiguous "linked bed" region. */
   isLinked?: boolean;
+  /** Hungry beds: pup count this cell's region requires — shown as a badge
+   *  on the region's top-left anchor cell. */
+  requiredPups?: number;
   borders?: CellBorders;
   row?: number;
   col?: number;
+  /**
+   * Level number — used for per-level gradient hue/saturation + direction
+   * variants so two different levels that share the same region IDs still
+   * paint as visually distinct candy tiles.
+   *
+   * Defaults to 1 (safe: always produces the base gradient, no weird seed shift) when the
+   * calling screen does not pass it through from the store.
+   */
+  level?: number;
 }
 
 const CellComponent: React.FC<CellProps> = ({
@@ -48,9 +60,11 @@ const CellComponent: React.FC<CellProps> = ({
   showBow,
   isCompleting,
   isLinked = false,
+  requiredPups,
   borders = { top: true, bottom: true, left: true, right: true },
   row = 0,
   col = 0,
+  level = 1,
 }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -213,7 +227,7 @@ const CellComponent: React.FC<CellProps> = ({
   }, [isCompleting, value, row, col, celebrateAnim, flipAnim]);
 
   const theme = getRegionTheme(regionId);
-  const gradient = getTileGradient(regionId);
+  const gradient = getTileGradient(regionId, level);
 
   // Region identity is carried by hue plus whitespace: tiles on a region
   // boundary pull further in, so each region reads as its own cluster of candies
@@ -253,7 +267,9 @@ const CellComponent: React.FC<CellProps> = ({
           }}
         >
           <LinearGradient
-            colors={gradient}
+            colors={gradient.colors}
+            start={gradient.start}
+            end={gradient.end}
             style={[
               styles.face,
               {
@@ -429,7 +445,29 @@ const CellComponent: React.FC<CellProps> = ({
             )}
 
             {isLinked && (
-              <Text style={styles.linkBadge}>🔗</Text>
+              <Text
+                pointerEvents="none"
+                style={[
+                  styles.linkBadge,
+                  { fontSize: Math.max(10, faceWidth * 0.34) },
+                ]}
+              >
+                🦴
+              </Text>
+            )}
+
+            {/* Hungry bed: the patch's own pup count, badge on the anchor cell */}
+            {requiredPups !== undefined && (
+              <View pointerEvents="none" style={styles.hungryBadge}>
+                <Text
+                  style={[
+                    styles.hungryBadgeText,
+                    { fontSize: Math.max(9, faceWidth * 0.3) },
+                  ]}
+                >
+                  {requiredPups}
+                </Text>
+              </View>
             )}
           </LinearGradient>
 
@@ -478,6 +516,7 @@ export const Cell = React.memo(CellComponent, (prev, next) => {
     prev.regionId === next.regionId &&
     prev.size === next.size &&
     prev.isLinked === next.isLinked &&
+    prev.requiredPups === next.requiredPups &&
     prev.isWrong === next.isWrong &&
     prev.isHinted === next.isHinted &&
     prev.isCatAura === next.isCatAura &&
@@ -531,10 +570,32 @@ const styles = StyleSheet.create({
   },
   linkBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    fontSize: 11,
+    top: 1,
+    right: 1,
     zIndex: 30,
+    textShadowColor: '#FFC93C',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 5,
+  },
+  hungryBadge: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    minWidth: 14,
+    height: 14,
+    paddingHorizontal: 2,
+    borderRadius: 7,
+    backgroundColor: '#F5B324',
+    borderWidth: 1,
+    borderColor: 'rgba(74, 48, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
+  },
+  hungryBadgeText: {
+    fontWeight: '900',
+    color: '#4A3000',
+    lineHeight: 12,
   },
   bowBadge: {
     position: 'absolute',

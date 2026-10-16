@@ -19,6 +19,7 @@ import { GameEngine } from '../src/game/engine';
 import { PuzzleSolver } from '../src/game/solver';
 import { level1 } from '../src/data/puzzles';
 import { useGameStore } from '../src/store/gameStore';
+import { MAX_LEVEL } from '../src/game/types';
 import { calculatePawfectStars, recordLevelCompletion, saveStats } from '../src/utils/statistics';
 
 const store = () => useGameStore.getState();
@@ -28,33 +29,48 @@ beforeEach(() => {
   store().setGameMode('normal');
 });
 
-describe('Oops protection', () => {
-  it('forgives three normal mistakes, then loses hearts', () => {
+describe('Heart and mistake rules', () => {
+  it('reduces hearts on mistakes, down to 0 for game over', () => {
     store().placePuppy(0, 0);
-    for (let i = 0; i < 3; i++) {
-      expect(store().placePuppy(0, 1)).toBe(false);
-      expect(store().hearts).toBe(3);
-      expect(store().engine!.getState().hearts).toBe(3);
-      expect(store().lastMistakeForgiven).toBe(true);
-    }
-    store().placePuppy(0, 1);
+    // Mistake 1 -> 2 hearts
+    expect(store().placePuppy(0, 1)).toBe(false);
     expect(store().hearts).toBe(2);
-    expect(store().mistakes).toBe(4);
+    expect(store().engine!.getState().hearts).toBe(2);
     expect(store().lastMistakeForgiven).toBe(false);
+
+    // Mistake 2 -> 1 heart ("after losing 2 love, one love")
+    expect(store().placePuppy(0, 1)).toBe(false);
+    expect(store().hearts).toBe(1);
+    expect(store().engine!.getState().hearts).toBe(1);
+
+    // Mistake 3 -> 0 hearts, game over
+    expect(store().placePuppy(0, 1)).toBe(false);
+    expect(store().hearts).toBe(0);
+    expect(store().engine!.getState().hearts).toBe(0);
+    expect(store().isGameOver).toBe(true);
   });
 
-  it.each(['zen', 'challenge'] as const)('keeps %s rules', mode => {
+  it.each(['zen', 'normal'] as const)('keeps %s rules', mode => {
     store().setGameMode(mode);
     store().placePuppy(0, 0);
-    for (let i = 0; i < 3; i++) store().placePuppy(0, 1);
-    expect(store().hearts).toBe(mode === 'zen' ? 3 : 0);
-    expect(store().isGameOver).toBe(mode === 'challenge');
+    // Zen: every wrong tap is forgiven (hearts never drain).
+    // Normal: 3 wrong taps drain all 3 hearts and cause game-over.
+    const wrongTaps = 3;
+    for (let i = 0; i < wrongTaps; i++) store().placePuppy(0, 1);
+    if (mode === 'zen') {
+      expect(store().hearts).toBe(3);
+      expect(store().isGameOver).toBe(false);
+    } else {
+      expect(store().hearts).toBe(0);
+      expect(store().isGameOver).toBe(true);
+    }
     expect(store().engine!.getState().hearts).toBe(store().hearts);
   });
 
   it('does not count taps after game over or outside the board', () => {
-    store().setGameMode('challenge');
+    store().setGameMode('normal');
     store().placePuppy(0, 0);
+    // In Normal: 3 wrongs before 0 hearts.
     for (let i = 0; i < 3; i++) store().placePuppy(0, 1);
     expect(store().placePuppy(2, 3)).toBe(false);
     expect(store().markCell(2, 3)).toBe(false);
@@ -66,8 +82,9 @@ describe('Oops protection', () => {
   });
 
   it('undo does not refund mistake allowance or hearts', () => {
-    store().setGameMode('challenge');
+    store().setGameMode('normal');
     store().placePuppy(0, 0);
+    // In Normal: 1 wrong tap drains a heart from 3 to 2.
     store().placePuppy(0, 1);
     store().undo();
     expect(store().mistakes).toBe(1);
@@ -77,7 +94,7 @@ describe('Oops protection', () => {
   it('changing mode restarts the same puzzle without erasing hint costs', () => {
     store().requestHint();
     store().markCell(0, 0);
-    store().setGameMode('challenge');
+    store().setGameMode('zen');
     expect(store().moves).toBe(0);
     expect(store().mistakes).toBe(0);
     expect(store().hintsUsed).toBe(1);
@@ -97,22 +114,13 @@ describe('Live hints', () => {
     expect(JSON.stringify(board)).toBe(before);
   });
 
-  it('explains, reveals, and applies one cell, charging once', () => {
+  it('directly finds and applies one cell deduction, charging once', () => {
+    const beforeMoves = store().moves;
     expect(store().requestHint()).toBe(true);
-    expect(store().activeHint!.tier).toBe(1);
     expect(store().hintsUsed).toBe(1);
-    expect(store().moves).toBe(0);
-    const hint = store().activeHint!;
-    store().requestHint();
-    expect(store().activeHint!.tier).toBe(2);
-    expect(store().moves).toBe(0);
-    store().requestHint();
-    expect(store().activeHint).toBeNull();
-    expect(store().hintsUsed).toBe(1);
-    expect(store().board.cells[hint.cell.row][hint.cell.col].value).toBe(hint.value);
-    expect(store().moves).toBe(1);
+    expect(store().moves).toBe(beforeMoves + 1);
     store().undo();
-    expect(store().board.cells[hint.cell.row][hint.cell.col].value).toBe('empty');
+    expect(store().moves).toBe(beforeMoves);
     expect(store().hintsUsed).toBe(1);
   });
 
@@ -169,7 +177,7 @@ describe('Restart and stars', () => {
     expect(calculatePawfectStars(1, 20).stars).toBe(0.5);
   });
 
-  it('counts forgiven mistakes against stars in normal/challenge, never in zen', () => {
+  it('counts forgiven mistakes against stars in normal mode, never in zen', () => {
     // Hearts are full (forgiven) but three wrong moves were made
     expect(calculatePawfectStars(3, 0, 3).stars).toBe(1.5);
     expect(calculatePawfectStars(3, 1, 2).stars).toBe(1.5);
@@ -199,6 +207,47 @@ describe('Progression integrity', () => {
     for (const cell of level1.solution) store().placePuppy(cell.row, cell.col);
     expect(store().isComplete).toBe(true);
     expect(store().unlockedLevels).toBe(1);
+  });
+
+  it('dev unlock-all needs __DEV__ AND the env flag, so release builds stay locked', () => {
+    const initialUnlocked = (dev: boolean, flag?: string) => {
+      const prevDev = (global as any).__DEV__;
+      (global as any).__DEV__ = dev;
+      if (flag === undefined) delete process.env.EXPO_PUBLIC_DEV_UNLOCK_ALL;
+      else process.env.EXPO_PUBLIC_DEV_UNLOCK_ALL = flag;
+      let n = 0;
+      jest.isolateModules(() => {
+        n = require('../src/store/gameStore').useGameStore.getInitialState().unlockedLevels;
+      });
+      (global as any).__DEV__ = prevDev;
+      delete process.env.EXPO_PUBLIC_DEV_UNLOCK_ALL;
+      return n;
+    };
+    expect(initialUnlocked(true)).toBe(1);
+    expect(initialUnlocked(true, '0')).toBe(1);
+    expect(initialUnlocked(false, '1')).toBe(1);
+    expect(initialUnlocked(true, '1')).toBe(MAX_LEVEL);
+  });
+
+  it('leaving a daily challenge restores the campaign level instead of the 0 sentinel', () => {
+    useGameStore.setState({ unlockedLevels: 50 });
+    store().startLevel(50);
+    store().startDailyChallenge();
+    expect(store().currentLevel).toBe(0);
+    for (const cell of level1.solution) store().placePuppy(cell.row, cell.col);
+    expect(store().isComplete).toBe(true);
+    store().setActiveScreen('home');
+    expect(store().isDailyChallenge).toBe(false);
+    expect(store().currentLevel).toBe(50);
+    expect(store().unlockedLevels).toBe(50);
+    // Re-entering the daily from Home and leaving via Map keeps it too.
+    store().startDailyChallenge();
+    store().setActiveScreen('map');
+    expect(store().currentLevel).toBe(50);
+    store().startDailyChallenge();
+    store().setActiveScreen('leaderboard');
+    expect(store().isDailyChallenge).toBe(false);
+    expect(store().currentLevel).toBe(50);
   });
 
   it('completing a campaign level unlocks exactly the next one', () => {

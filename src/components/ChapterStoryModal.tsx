@@ -321,10 +321,11 @@ const styles = StyleSheet.create({
   speechBubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
+    // Y3: gap:10 replaced with speechBubble marginLeft:10 below
   },
   speechBubble: {
     flex: 1,
+    marginLeft: 10, // Y3: replaces speechBubbleRow gap:10
     backgroundColor: 'rgba(245, 179, 36, 0.12)',
     borderRadius: 14,
     borderWidth: 1.5,
@@ -374,11 +375,12 @@ const styles = StyleSheet.create({
   },
   dotsRow: {
     flexDirection: 'row',
-    gap: 5,
+    // Y3: gap:5 replaced with dot marginRight:5 below
   },
   dot: {
     width: 7,
     height: 7,
+    marginRight: 5, // Y3: replaces dotsRow gap:5
     borderRadius: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
